@@ -5,7 +5,6 @@ import {
   openPlansFile,
   createPlansFile,
   writePlans,
-  getConnectedFileName,
   clearActiveHandle,
   getActiveHandle,
 } from "../utils/fileStorage";
@@ -23,9 +22,7 @@ export function FileStorageBar() {
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
-  if (!isFileSystemAccessSupported()) return null;
-
-  // Auto-save whenever plans change (debounced 800ms)
+  // Auto-save ALL plans to the connected file whenever any plan changes
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
@@ -49,6 +46,9 @@ export function FileStorageBar() {
     }, 800);
   }, [plans]);
 
+  // Don't render if the browser doesn't support File System Access API
+  if (!isFileSystemAccessSupported()) return null;
+
   async function handleOpen() {
     setShowMenu(false);
     const result = await openPlansFile();
@@ -69,6 +69,20 @@ export function FileStorageBar() {
     setErrorMsg(null);
   }
 
+  async function handleSaveNow() {
+    const handle = getActiveHandle();
+    if (!handle) return;
+    setSaveStatus("saving");
+    try {
+      await writePlans(handle, plans);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch {
+      setSaveStatus("error");
+      setErrorMsg("Save failed — file may have been moved or deleted.");
+    }
+  }
+
   function handleDisconnect() {
     clearActiveHandle();
     setConnectedFile(null);
@@ -76,12 +90,19 @@ export function FileStorageBar() {
     setErrorMsg(null);
   }
 
-  const statusColor = saveStatus === "error" ? "#dc2626" : saveStatus === "saving" ? "#d97706" : "#16a34a";
+  const statusColor =
+    saveStatus === "error" ? "#dc2626" :
+    saveStatus === "saving" ? "#d97706" :
+    "#16a34a";
+
   const statusLabel =
     saveStatus === "saving" ? "Saving…" :
     saveStatus === "saved" ? "Saved ✓" :
     saveStatus === "error" ? "Save failed" :
     "Auto-saving";
+
+  const planCount = plans.length;
+  const planWord = planCount === 1 ? "plan" : "plans";
 
   return (
     <div
@@ -112,12 +133,30 @@ export function FileStorageBar() {
             }}
           />
           <span style={{ color: "#166534", fontWeight: 500 }}>{connectedFile}</span>
+          <span style={{ color: "#6b7785" }}>
+            — {planCount} {planWord} included
+          </span>
           <span style={{ color: statusColor }}>{statusLabel}</span>
           {errorMsg && <span style={{ color: "#dc2626" }}>— {errorMsg}</span>}
           <button
-            onClick={handleDisconnect}
+            onClick={handleSaveNow}
+            title="Save all plans to file right now"
             style={{
               marginLeft: 4,
+              background: "none",
+              border: "1px solid #c0cad4",
+              borderRadius: 4,
+              padding: "1px 8px",
+              cursor: "pointer",
+              fontSize: 11,
+              color: "#1f6feb",
+            }}
+          >
+            Save now
+          </button>
+          <button
+            onClick={handleDisconnect}
+            style={{
               background: "none",
               border: "1px solid #c0cad4",
               borderRadius: 4,
@@ -163,20 +202,20 @@ export function FileStorageBar() {
                   border: "1px solid #c0cad4",
                   borderRadius: 6,
                   boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                  minWidth: 210,
+                  minWidth: 220,
                   padding: 4,
                 }}
               >
                 <MenuButton
                   icon="📂"
                   label="Open existing plans file"
-                  description="Load plans from a .json file on disk"
+                  description="Load all plans from a .json file on disk"
                   onClick={handleOpen}
                 />
                 <MenuButton
                   icon="💾"
-                  label="Save plans to new file"
-                  description="Export current plans to a .json file"
+                  label="Save all plans to new file"
+                  description={`Export all ${planCount} ${planWord} to a .json file`}
                   onClick={handleCreate}
                 />
               </div>
@@ -187,7 +226,7 @@ export function FileStorageBar() {
 
       {!connectedFile && (
         <span style={{ color: "#9aa5b1", fontSize: 11 }}>
-          Plans are currently in browser storage only
+          {planCount} {planWord} in browser storage only
         </span>
       )}
     </div>
