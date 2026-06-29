@@ -8,6 +8,7 @@ import { PlansDialog } from "./components/dialogs/PlansDialog";
 import { ExportDialog } from "./components/dialogs/ExportDialog";
 import { PromptModal } from "./components/dialogs/MiniModal";
 import { ComparePlansDialog } from "./components/dialogs/ComparePlansDialog";
+import { FileStorageBar } from "./components/FileStorageBar";
 import { usePlanStore } from "./state/planStore";
 import { useShortcuts } from "./hooks/useShortcuts";
 
@@ -70,6 +71,7 @@ export default function App() {
         onSaveKit={handleSaveKit}
         onComparePlans={() => setShowCompare(true)}
       />
+      <FileStorageBar />
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <CatalogPanel />
         <div ref={canvasContainerRef} style={{ flex: 1, position: "relative" }}>

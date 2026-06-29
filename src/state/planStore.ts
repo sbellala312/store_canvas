@@ -101,6 +101,9 @@ interface Actions {
   setZoom: (z: number) => void;
   setPan: (p: { x: number; y: number }) => void;
 
+  // Bulk replace (used by file storage to load plans from disk)
+  replacePlans: (plans: FloorPlan[], activePlanId?: string | null) => void;
+
   // History
   undo: () => void;
   redo: () => void;
@@ -610,5 +613,17 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
     const id = get().activePlanId;
     if (!id) return false;
     return (get().history[id]?.future.length ?? 0) > 0;
+  },
+
+  replacePlans: (plans, activePlanId) => {
+    persistAllPlans(plans);
+    const firstId = plans[0]?.id ?? null;
+    const resolvedActive =
+      activePlanId !== undefined
+        ? activePlanId
+        : plans.some((p) => p.id === get().activePlanId)
+        ? get().activePlanId
+        : firstId;
+    set({ plans, activePlanId: resolvedActive, history: {} });
   },
 }));
