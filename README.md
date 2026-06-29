@@ -4,6 +4,17 @@ A browser-based, true-to-scale 2D floor planning tool for Ashley Furniture store
 
 ---
 
+## Branches
+
+| Branch | Description |
+|---|---|
+| `poc` | Current stable version — all core features + disk storage |
+| `version2` | Phase 2 features — isometric 3D view, furniture detail overlays, layer toggles, ADA clearance warnings, right-click context menu |
+| `poc-plans-local-disk-storage` | Feature branch (merged into `poc`) |
+| `main` | Initial scaffold |
+
+---
+
 ## Features
 
 ### Floor Planning
@@ -37,8 +48,12 @@ A browser-based, true-to-scale 2D floor planning tool for Ashley Furniture store
 
 ### Plan Management
 - **Multiple named plans** — create, rename, duplicate, and delete plans independently
-- **Auto-save** to browser localStorage — reload the page and your work is restored
+- **Auto-save to browser localStorage** — reload the page and your work is restored
+- **Disk storage (File System Access API)** — connect a `.json` file on your PC; all plans auto-save to disk on every change and can be reloaded after a browser cache clear *(Chrome / Edge only)*
 - **Duplicate plan** — branch a layout variant without affecting the original
+
+### HUD (Heads-Up Display)
+- Bottom-left overlay showing floor area, occupied sq ft, free sq ft, and a per-zone area breakdown in real time
 
 ### Compare Plans
 - Select any two saved plans as **Before (Pre)** and **After (Post)**
@@ -53,6 +68,32 @@ A browser-based, true-to-scale 2D floor planning tool for Ashley Furniture store
 
 ---
 
+## Phase 2 Features (`version2` branch)
+
+### Isometric 3D View
+- Toggle **⬡ 3D View** in the toolbar to switch to an isometric projection
+- All furniture rendered as 3D blocks with top, front, and side faces shaded by depth
+- Zones and non-usable regions rendered as flat floor-level shapes
+- Painter's algorithm ensures correct back-to-front draw order
+- View-only (return to 2D to edit)
+
+### Furniture Detail Overlays
+- Furniture items on the canvas show subcategory-specific detail lines (cushions on sofas, legs on tables, headboard on beds, drawers on storage, etc.)
+- Rendered as Konva primitives — no image loading required
+
+### Layer Visibility Toggles
+- Toolbar checkboxes to independently show/hide **Zones**, **Walls**, **Blocked areas**, and **Accessories**
+
+### ADA Clearance Warnings
+- Enable **⚠ Clearance** in the toolbar to auto-detect furniture pairs with less than **36" aisle gap**
+- Amber dashed border around flagged items; gap indicator line with distance label
+- Red for gaps under 24", amber for 24"–36"
+
+### Right-Click Context Menu
+- Right-click any placed item for **Duplicate**, **Rotate 90° CW**, **Rotate 90° CCW**, and **Delete**
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -61,7 +102,7 @@ A browser-based, true-to-scale 2D floor planning tool for Ashley Furniture store
 | Build | Vite |
 | Canvas | Konva / react-konva |
 | State | Zustand |
-| Persistence | Browser localStorage |
+| Persistence | Browser localStorage + File System Access API (optional) |
 | Styling | Inline React styles (no CSS framework) |
 
 ---
@@ -75,18 +116,25 @@ A browser-based, true-to-scale 2D floor planning tool for Ashley Furniture store
 ### Install and run
 
 ```bash
-# Clone the repo
 git clone https://github.com/sbellala312/store_canvas.git
 cd store_canvas
 
-# Install dependencies
-npm install
+# Switch to the stable poc branch
+git checkout poc
 
-# Start the dev server
+npm install
 npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+### Share with a coworker (same network)
+
+```bash
+npm run dev -- --host
+```
+
+Use the **Network** URL printed in the terminal (e.g. `http://10.x.x.x:5173`).
 
 ### Build for production
 
@@ -95,6 +143,24 @@ npm run build
 ```
 
 Output goes to `dist/`.
+
+---
+
+## Disk Storage (File System Access API)
+
+A thin bar below the toolbar lets you connect plans to a `.json` file on your PC.
+
+| Action | Result |
+|---|---|
+| **Connect file → Save all plans to new file** | Creates a new `.json` file with all current plans |
+| **Connect file → Open existing plans file** | Loads plans from disk, replaces browser localStorage |
+| **Auto-save** | Triggers 800ms after any plan create / edit / delete |
+| **Save now** | Manually writes all plans to the file immediately |
+| **Disconnect** | Reverts to browser localStorage only |
+
+> Plans are stored as a single JSON array — all plans in one file. The connection resets on page refresh; reconnect via **Open existing plans file** each session.
+>
+> Requires Chrome or Edge. Not supported in Safari.
 
 ---
 
@@ -134,6 +200,7 @@ src/
 │   │   ├── NonUsableLayer.tsx     # Non-usable area rendering
 │   │   ├── GridLayer.tsx          # Snap grid overlay
 │   │   └── LabelsOverlay.tsx      # Item name labels
+│   ├── FileStorageBar.tsx         # Disk storage connect/status bar
 │   ├── CatalogPanel/
 │   │   └── CatalogPanel.tsx       # Left panel: catalog + kits tabs with search
 │   ├── PropertiesPanel/
@@ -143,10 +210,10 @@ src/
 │       ├── PlansDialog.tsx        # Plan list: open, rename, duplicate, delete
 │       ├── PlanDialog.tsx         # Create / edit plan dimensions and floor shape
 │       ├── ExportDialog.tsx       # PNG / PDF export
-│       ├── MiniModal.tsx          # PromptModal + ConfirmModal (replaces browser dialogs)
+│       ├── MiniModal.tsx          # PromptModal + ConfirmModal
 │       └── Modal.tsx              # Base modal wrapper
 ├── data/
-│   └── catalog.ts                 # 25-item furniture catalog
+│   └── catalog.ts                 # 25-item furniture catalog with dimensions
 ├── state/
 │   ├── planStore.ts               # Zustand store: plans, kits, tools, history
 │   └── dragContext.ts             # Drag-and-drop shared context
@@ -156,6 +223,7 @@ src/
 │   ├── comparePlans.ts            # Diff computation: item matching + zone comparison
 │   ├── exportData.ts              # JSON / CSV data export
 │   ├── export.ts                  # PNG / PDF canvas export
+│   ├── fileStorage.ts             # File System Access API helpers
 │   ├── geometry.ts                # pointInRect, pointInPolygon, snap, edge-snap guides
 │   ├── persistence.ts             # localStorage read/write helpers
 │   └── units.ts                   # feetInches(), parseFeetInches(), sqft helpers
@@ -174,7 +242,7 @@ All internal measurements are in **inches**. The canvas uses `pixelsPerInch = 2`
 Items between two plans are matched by **product type + nearest neighbor**: for each item type (catalogId), the closest unmatched item in the Post plan is paired with its Pre counterpart. Pairs where the center moved ≥ 6" or rotated ≥ 5° are classified as **moved**; otherwise **unchanged**. Zones are matched by name (case-insensitive).
 
 ### Persistence
-Plans and Kits are serialized to `localStorage` under `storeCanvas.plans`, `storeCanvas.activePlanId`, and `storeCanvas.kits`. Each plan maintains an independent undo/redo history stack (capped at 50 states).
+Plans and Kits are serialized to `localStorage` under `storeCanvas.plans`, `storeCanvas.activePlanId`, and `storeCanvas.kits`. When disk storage is connected, every change also writes to the `.json` file on disk. Each plan maintains an independent undo/redo history stack (capped at 50 states).
 
 ---
 
@@ -184,7 +252,5 @@ This is a **proof-of-concept** for internal evaluation. Out of scope for this ve
 
 - Backend, authentication, or multi-user sharing
 - Real Ashley catalog / API integration
-- 3D or angled views
 - Mobile / tablet layouts
-- Clearance warnings
 - Real-time collaboration
