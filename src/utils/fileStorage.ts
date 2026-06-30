@@ -41,12 +41,17 @@ export async function openPlansFile(): Promise<{
     } catch {
       plans = [];
     }
-    activeHandle = handle;
+    // Caller decides whether to activate this handle after showing a confirmation dialog
     return { handle, plans };
   } catch {
     // User cancelled or permission denied
     return null;
   }
+}
+
+/** Activate a handle that was previously returned by openPlansFile. */
+export function setActiveHandle(handle: FileSystemFileHandle): void {
+  activeHandle = handle;
 }
 
 /** Create (or overwrite) a plans JSON file with the current plans. */

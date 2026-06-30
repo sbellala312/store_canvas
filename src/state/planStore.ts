@@ -10,6 +10,8 @@ import type {
   NonUsableRect,
   NonUsablePolygon,
   Wall,
+  Door,
+  Window,
   Kit,
   Tool,
   Point,
@@ -43,8 +45,10 @@ interface State {
   zoneEditMode: "view" | "move" | "resize";
   nonUsableEditMode: "view" | "move" | "resize";
   pixelsPerInch: number;
+  scaleRatio: number;
   zoom: number;
   pan: { x: number; y: number };
+  showRuler: boolean;
 
   history: Record<string, History>;
 }
@@ -71,6 +75,7 @@ interface Actions {
   updateZone: (id: string, patch: Partial<ZoneRect> & Partial<ZonePolygon>) => void;
   moveZoneBy: (id: string, dx: number, dy: number) => void;
   deleteZone: (id: string) => void;
+  setStoreZone: (id: string | null) => void;
 
   addNonUsable: (r: Omit<NonUsableRect, "id"> | Omit<NonUsablePolygon, "id">) => void;
   updateNonUsable: (id: string, patch: Partial<Omit<NonUsableRect, "id" | "kind">> & Partial<Omit<NonUsablePolygon, "id" | "kind">>) => void;
@@ -80,6 +85,14 @@ interface Actions {
   addWall: (w: Omit<Wall, "id">) => void;
   updateWall: (id: string, patch: Partial<Wall>) => void;
   deleteWall: (id: string) => void;
+
+  addDoor: (d: Omit<Door, "id">) => string;
+  updateDoor: (id: string, patch: Partial<Omit<Door, "id">>) => void;
+  deleteDoor: (id: string) => void;
+
+  addWindow: (w: Omit<Window, "id">) => string;
+  updateWindow: (id: string, patch: Partial<Omit<Window, "id">>) => void;
+  deleteWindow: (id: string) => void;
 
   toggleGrid: () => void;
   toggleSnap: () => void;
@@ -98,8 +111,10 @@ interface Actions {
   clearSelection: () => void;
   setZoneEditMode: (mode: "view" | "move" | "resize") => void;
   setNonUsableEditMode: (mode: "view" | "move" | "resize") => void;
+  setScaleRatio: (n: number) => void;
   setZoom: (z: number) => void;
   setPan: (p: { x: number; y: number }) => void;
+  toggleRuler: () => void;
 
   // Bulk replace (used by file storage to load plans from disk)
   replacePlans: (plans: FloorPlan[], activePlanId?: string | null) => void;
@@ -159,8 +174,10 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   zoneEditMode: "view",
   nonUsableEditMode: "view",
   pixelsPerInch: 2,
+  scaleRatio: 48,
   zoom: 1,
   pan: { x: 0, y: 0 },
+  showRuler: false,
 
   history: {},
 
@@ -180,6 +197,8 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
       zones: [],
       nonUsable: [],
       walls: [],
+      doors: [],
+      windows: [],
       placedItems: [],
     };
     set((s) => {
@@ -378,6 +397,13 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
       p.zones = p.zones.filter((z) => z.id !== id);
     });
   },
+  setStoreZone: (id) => {
+    get().updateActive((p) => {
+      for (const z of p.zones) {
+        z.isStore = z.id === id ? true : undefined;
+      }
+    });
+  },
 
   addNonUsable: (r) => {
     get().updateActive((p) => {
@@ -452,6 +478,52 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
     get().updateActive((p) => {
       p.walls = p.walls.filter((w) => w.id !== id);
     });
+  },
+
+  addDoor: (d) => {
+    const id = uuid();
+    get().updateActive((p) => {
+      if (!p.doors) p.doors = [];
+      p.doors.push({ ...d, id });
+    });
+    return id;
+  },
+  updateDoor: (id, patch) => {
+    get().updateActive((p) => {
+      if (!p.doors) return;
+      const idx = p.doors.findIndex((d) => d.id === id);
+      if (idx >= 0) p.doors[idx] = { ...p.doors[idx], ...patch };
+    });
+  },
+  deleteDoor: (id) => {
+    get().updateActive((p) => {
+      if (!p.doors) return;
+      p.doors = p.doors.filter((d) => d.id !== id);
+    });
+    get().clearSelection();
+  },
+
+  addWindow: (w) => {
+    const id = uuid();
+    get().updateActive((p) => {
+      if (!p.windows) p.windows = [];
+      p.windows.push({ ...w, id });
+    });
+    return id;
+  },
+  updateWindow: (id, patch) => {
+    get().updateActive((p) => {
+      if (!p.windows) return;
+      const idx = p.windows.findIndex((w) => w.id === id);
+      if (idx >= 0) p.windows[idx] = { ...p.windows[idx], ...patch };
+    });
+  },
+  deleteWindow: (id) => {
+    get().updateActive((p) => {
+      if (!p.windows) return;
+      p.windows = p.windows.filter((w) => w.id !== id);
+    });
+    get().clearSelection();
   },
 
   toggleGrid: () => {
@@ -559,8 +631,10 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   clearSelection: () => set({ selectionIds: [], zoneEditMode: "view", nonUsableEditMode: "view" }),
   setZoneEditMode: (mode) => set({ zoneEditMode: mode, ...(mode !== "view" ? { tool: "select" } : {}) }),
   setNonUsableEditMode: (mode) => set({ nonUsableEditMode: mode, ...(mode !== "view" ? { tool: "select" } : {}) }),
+  setScaleRatio: (n) => set({ scaleRatio: n, pixelsPerInch: 96 / n }),
   setZoom: (z) => set({ zoom: Math.max(0.1, Math.min(5, z)) }),
   setPan: (p) => set({ pan: p }),
+  toggleRuler: () => set((s) => ({ showRuler: !s.showRuler })),
 
   undo: () => {
     set((s) => {

@@ -32,6 +32,7 @@ export interface ZoneRect {
   y: Inches;
   width: Inches;
   height: Inches;
+  isStore?: boolean;
 }
 
 export interface ZonePolygon {
@@ -40,6 +41,7 @@ export interface ZonePolygon {
   name: string;
   color: string;
   points: Point[];
+  isStore?: boolean;
 }
 
 export type Zone = ZoneRect | ZonePolygon;
@@ -70,6 +72,26 @@ export interface Wall {
   x2: Inches;
   y2: Inches;
   thickness: Inches;
+}
+
+export interface Door {
+  id: ID;
+  x: Inches;        // center of opening
+  y: Inches;
+  angle: number;    // wall direction in radians
+  width: Inches;    // opening width (default 36")
+  swing: "left" | "right";
+  kind: "single" | "double";
+  wallId?: ID;
+}
+
+export interface Window {
+  id: ID;
+  x: Inches;        // center of opening
+  y: Inches;
+  angle: number;    // wall direction in radians
+  width: Inches;    // opening width (default 36")
+  wallId?: ID;
 }
 
 export interface PlacedItem {
@@ -113,6 +135,8 @@ export interface FloorPlan {
   zones: Zone[];
   nonUsable: NonUsableRegion[];
   walls: Wall[];
+  doors: Door[];
+  windows: Window[];
   placedItems: PlacedItem[];
 }
 
@@ -124,6 +148,8 @@ export type Tool =
   | "nonUsable"
   | "nonUsablePolygon"
   | "wall"
+  | "door"
+  | "window"
   | "measure"
   | "delete";
 

@@ -22,6 +22,7 @@ export function PropertiesPanel() {
   const duplicatePlacedItems = usePlanStore((s) => s.duplicatePlacedItems);
   const updateZone = usePlanStore((s) => s.updateZone);
   const deleteZone = usePlanStore((s) => s.deleteZone);
+  const setStoreZone = usePlanStore((s) => s.setStoreZone);
   const zoneEditMode = usePlanStore((s) => s.zoneEditMode);
   const setZoneEditMode = usePlanStore((s) => s.setZoneEditMode);
   const updateNonUsable = usePlanStore((s) => s.updateNonUsable);
@@ -30,6 +31,10 @@ export function PropertiesPanel() {
   const setNonUsableEditMode = usePlanStore((s) => s.setNonUsableEditMode);
   const updateWall = usePlanStore((s) => s.updateWall);
   const deleteWall = usePlanStore((s) => s.deleteWall);
+  const updateDoor = usePlanStore((s) => s.updateDoor);
+  const deleteDoor = usePlanStore((s) => s.deleteDoor);
+  const updateWindow = usePlanStore((s) => s.updateWindow);
+  const deleteWindow = usePlanStore((s) => s.deleteWindow);
   const kits = usePlanStore((s) => s.kits);
 
   const width = 280;
@@ -330,6 +335,31 @@ export function PropertiesPanel() {
           </div>
         </div>
         <div style={fieldRow}>
+          <label style={labelStyle}>Store boundary</label>
+          <button
+            onClick={() => setStoreZone(zone.isStore ? null : zone.id)}
+            style={{
+              ...btnStyle,
+              background: zone.isStore ? "#15803d" : "white",
+              color: zone.isStore ? "white" : "#2d3742",
+              borderColor: zone.isStore ? "#15803d" : "#c0cad4",
+              fontWeight: zone.isStore ? 600 : 400,
+            }}
+          >
+            {zone.isStore ? "★ Store boundary (active)" : "Set as store boundary"}
+          </button>
+          {zone.isStore && (
+            <div style={{ fontSize: 11, color: "#15803d", marginTop: 4 }}>
+              Sqft panel now reflects this zone's area only.
+            </div>
+          )}
+          {!zone.isStore && (
+            <div style={{ fontSize: 11, color: "#9aa5b1", marginTop: 4 }}>
+              Mark this zone to scope the sqft HUD to store area only.
+            </div>
+          )}
+        </div>
+        <div style={fieldRow}>
           <label style={labelStyle}>Edit mode</label>
           <div style={{ display: "flex", gap: 4 }}>
             <ModeButton
@@ -470,6 +500,212 @@ export function PropertiesPanel() {
           onClick={() => deleteNonUsable(nu.id)}
         >
           Delete region
+        </button>
+      </div>
+    );
+  }
+
+  // Door?
+  const door = (plan.doors ?? []).find((d) => d.id === id);
+  if (door) {
+    const wall = door.wallId ? plan.walls.find((w) => w.id === door.wallId) : undefined;
+    let wallLen = 0;
+    let posAlongWall = 0;
+    if (wall) {
+      const dx = wall.x2 - wall.x1;
+      const dy = wall.y2 - wall.y1;
+      wallLen = Math.sqrt(dx * dx + dy * dy);
+      const t = wallLen > 0
+        ? Math.max(0, Math.min(1, ((door.x - wall.x1) * dx + (door.y - wall.y1) * dy) / (wallLen * wallLen)))
+        : 0;
+      posAlongWall = t * wallLen;
+    }
+    const moveDoorAlongWall = (posInches: number) => {
+      if (!wall || wallLen === 0) return;
+      const dx = wall.x2 - wall.x1;
+      const dy = wall.y2 - wall.y1;
+      const halfW = door.width / 2;
+      const clamped = Math.max(halfW, Math.min(wallLen - halfW, posInches));
+      const t = clamped / wallLen;
+      updateDoor(door.id, { x: wall.x1 + t * dx, y: wall.y1 + t * dy });
+    };
+    const DOOR_PRESETS_SINGLE = [24, 28, 30, 32, 36];
+    const DOOR_PRESETS_DOUBLE = [48, 60, 72, 84, 96];
+    const presets = door.kind === "double" ? DOOR_PRESETS_DOUBLE : DOOR_PRESETS_SINGLE;
+    return (
+      <div style={panelStyle(width)}>
+        <h3 style={h3Style}>Door</h3>
+
+        {/* Door kind */}
+        <div style={fieldRow}>
+          <label style={labelStyle}>Type</label>
+          <div style={{ display: "flex", gap: 4 }}>
+            <ModeButton active={door.kind !== "double"} onClick={() => updateDoor(door.id, { kind: "single" })} label="Single" />
+            <ModeButton active={door.kind === "double"} onClick={() => updateDoor(door.id, { kind: "double" })} label="Double" />
+          </div>
+        </div>
+
+        {/* Width */}
+        <div style={fieldRow}>
+          <label style={labelStyle}>Width</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="number"
+              min={12} step={1}
+              value={Math.round(door.width)}
+              onChange={(e) => updateDoor(door.id, { width: Math.max(12, parseFloat(e.target.value) || door.width) })}
+              style={{ ...inputStyle, width: 64 }}
+            />
+            <span style={{ fontSize: 11, color: "#6b7785" }}>in ({feetInches(door.width, { compact: true })})</span>
+          </div>
+          {/* Preset widths */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 5 }}>
+            {presets.map((p) => (
+              <button
+                key={p}
+                onClick={() => updateDoor(door.id, { width: p })}
+                style={{
+                  padding: "3px 7px", fontSize: 10, cursor: "pointer",
+                  background: Math.round(door.width) === p ? "#1f6feb" : "white",
+                  color: Math.round(door.width) === p ? "white" : "#2d3742",
+                  border: "1px solid #c0cad4", borderRadius: 3,
+                }}
+              >
+                {p}"
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: "#6b7785", marginTop: 3 }}>
+            Or drag the green handles on canvas to resize.
+          </div>
+        </div>
+
+        {/* Swing direction */}
+        <div style={fieldRow}>
+          <label style={labelStyle}>Swing direction</label>
+          <div style={{ display: "flex", gap: 4 }}>
+            <ModeButton active={door.swing === "right"} onClick={() => updateDoor(door.id, { swing: "right" })} label="Right" />
+            <ModeButton active={door.swing === "left"} onClick={() => updateDoor(door.id, { swing: "left" })} label="Left" />
+          </div>
+        </div>
+
+        {/* Position along wall */}
+        {wall && wallLen > 0 && (
+          <div style={fieldRow}>
+            <label style={labelStyle}>Position along wall</label>
+            <input
+              type="range"
+              min={door.width / 2}
+              max={wallLen - door.width / 2}
+              step={1}
+              value={posAlongWall}
+              onChange={(e) => moveDoorAlongWall(parseFloat(e.target.value))}
+              style={{ width: "100%" }}
+            />
+            <div style={{ fontSize: 11, color: "#6b7785", marginTop: 2 }}>
+              {feetInches(posAlongWall, { compact: true })} from wall start &nbsp;·&nbsp; wall {feetInches(wallLen, { compact: true })} long
+            </div>
+          </div>
+        )}
+        <hr style={hr} />
+        <button
+          style={{ ...btnStyle, background: "#e74c3c", color: "white" }}
+          onClick={() => deleteDoor(door.id)}
+        >
+          Delete door
+        </button>
+      </div>
+    );
+  }
+
+  // Window?
+  const win = (plan.windows ?? []).find((w) => w.id === id);
+  if (win) {
+    const wall = win.wallId ? plan.walls.find((w) => w.id === win.wallId) : undefined;
+    let wallLen = 0;
+    let posAlongWall = 0;
+    if (wall) {
+      const dx = wall.x2 - wall.x1;
+      const dy = wall.y2 - wall.y1;
+      wallLen = Math.sqrt(dx * dx + dy * dy);
+      const t = wallLen > 0
+        ? Math.max(0, Math.min(1, ((win.x - wall.x1) * dx + (win.y - wall.y1) * dy) / (wallLen * wallLen)))
+        : 0;
+      posAlongWall = t * wallLen;
+    }
+    const moveWinAlongWall = (posInches: number) => {
+      if (!wall || wallLen === 0) return;
+      const dx = wall.x2 - wall.x1;
+      const dy = wall.y2 - wall.y1;
+      const halfW = win.width / 2;
+      const clamped = Math.max(halfW, Math.min(wallLen - halfW, posInches));
+      const t = clamped / wallLen;
+      updateWindow(win.id, { x: wall.x1 + t * dx, y: wall.y1 + t * dy });
+    };
+    const WIN_PRESETS = [24, 30, 36, 48, 60, 72];
+    return (
+      <div style={panelStyle(width)}>
+        <h3 style={h3Style}>Window</h3>
+
+        {/* Width */}
+        <div style={fieldRow}>
+          <label style={labelStyle}>Width</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="number"
+              min={6} step={1}
+              value={Math.round(win.width)}
+              onChange={(e) => updateWindow(win.id, { width: Math.max(6, parseFloat(e.target.value) || win.width) })}
+              style={{ ...inputStyle, width: 64 }}
+            />
+            <span style={{ fontSize: 11, color: "#6b7785" }}>in ({feetInches(win.width, { compact: true })})</span>
+          </div>
+          {/* Preset widths */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 5 }}>
+            {WIN_PRESETS.map((p) => (
+              <button
+                key={p}
+                onClick={() => updateWindow(win.id, { width: p })}
+                style={{
+                  padding: "3px 7px", fontSize: 10, cursor: "pointer",
+                  background: Math.round(win.width) === p ? "#1f6feb" : "white",
+                  color: Math.round(win.width) === p ? "white" : "#2d3742",
+                  border: "1px solid #c0cad4", borderRadius: 3,
+                }}
+              >
+                {p}"
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: "#6b7785", marginTop: 3 }}>
+            Or drag the green handles on canvas to resize.
+          </div>
+        </div>
+
+        {/* Position along wall */}
+        {wall && wallLen > 0 && (
+          <div style={fieldRow}>
+            <label style={labelStyle}>Position along wall</label>
+            <input
+              type="range"
+              min={win.width / 2}
+              max={wallLen - win.width / 2}
+              step={1}
+              value={posAlongWall}
+              onChange={(e) => moveWinAlongWall(parseFloat(e.target.value))}
+              style={{ width: "100%" }}
+            />
+            <div style={{ fontSize: 11, color: "#6b7785", marginTop: 2 }}>
+              {feetInches(posAlongWall, { compact: true })} from wall start &nbsp;·&nbsp; wall {feetInches(wallLen, { compact: true })} long
+            </div>
+          </div>
+        )}
+        <hr style={hr} />
+        <button
+          style={{ ...btnStyle, background: "#e74c3c", color: "white" }}
+          onClick={() => deleteWindow(win.id)}
+        >
+          Delete window
         </button>
       </div>
     );

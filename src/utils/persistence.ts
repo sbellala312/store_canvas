@@ -20,6 +20,11 @@ export function loadPlans(): FloorPlan[] {
       for (const n of plan.nonUsable ?? []) {
         if (!n.kind) n.kind = "rect";
       }
+      if (!plan.doors) plan.doors = [];
+      if (!plan.windows) plan.windows = [];
+      for (const d of plan.doors) {
+        if (!d.kind) d.kind = "single";
+      }
     }
     return parsed;
   } catch {

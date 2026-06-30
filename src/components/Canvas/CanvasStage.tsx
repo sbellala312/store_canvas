@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Line, Text, Group, Circle, Transformer } from "react-konva";
+import { Stage, Layer, Rect, Line, Text, Group, Circle, Transformer, Image as KonvaImage } from "react-konva";
 import type Konva from "konva";
 import type { Point } from "../../types/model";
 import { usePlanStore } from "../../state/planStore";
@@ -10,13 +10,17 @@ import { GridLayer } from "./GridLayer";
 import { ZonesLayer } from "./ZonesLayer";
 import { NonUsableLayer } from "./NonUsableLayer";
 import { WallsLayer } from "./WallsLayer";
+import { DoorsWindowsLayer } from "./DoorsWindowsLayer";
 import { ItemsLayer } from "./ItemsLayer";
 import { LabelsOverlay } from "./LabelsOverlay";
-import { snapPoint, distance, polygonArea, floorBBox } from "../../utils/geometry";
+import { CanvasRuler } from "./CanvasRuler";
+import { ScaleBar } from "./ScaleBar";
+import { snapPoint, distance, polygonArea, pointInPolygon, pointInRect, floorBBox } from "../../utils/geometry";
 import type { SnapGuide } from "../../utils/geometry";
 import { feetInches, sqftFromInches, formatSqft } from "../../utils/units";
 import { registerStage } from "../../utils/stageRef";
 import { setSpaceDown } from "../../utils/panMode";
+import { useRefImageStore } from "../../state/refImageStore";
 
 interface Props {
   width: number;
@@ -64,8 +68,14 @@ export function CanvasStage({ width, height }: Props) {
   const addZone = usePlanStore((s) => s.addZone);
   const addNonUsable = usePlanStore((s) => s.addNonUsable);
   const addWall = usePlanStore((s) => s.addWall);
+  const addDoor = usePlanStore((s) => s.addDoor);
+  const updateDoor = usePlanStore((s) => s.updateDoor);
+  const addWindow = usePlanStore((s) => s.addWindow);
+  const updateWindow = usePlanStore((s) => s.updateWindow);
   const stampKit = usePlanStore((s) => s.stampKit);
   const setTool = usePlanStore((s) => s.setTool);
+  const showRuler = usePlanStore((s) => s.showRuler);
+  const scaleRatio = usePlanStore((s) => s.scaleRatio);
 
   const [draftRect, setDraftRect] = useState<DraftRectState | null>(null);
   const [draftLine, setDraftLine] = useState<DraftLineState | null>(null);
@@ -74,8 +84,23 @@ export function CanvasStage({ width, height }: Props) {
   const [draftPolygon, setDraftPolygon] = useState<Point[] | null>(null);
   const [isPanningState, setIsPanningState] = useState(false);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
+  const [wallEndpointSnap, setWallEndpointSnap] = useState<{ x: number; y: number } | null>(null);
+  const [wallProjectionSnap, setWallProjectionSnap] = useState<{ x: number; y: number; angle: number; wallId: string } | null>(null);
   const isPanning = useRef(false);
   const spaceDown = useRef(false);
+  const altDown = useRef(false);
+  const shiftDown = useRef(false);
+
+  const refImages = useRefImageStore((s) => s.refImages);
+  const refImage = plan ? (refImages[plan.id] ?? null) : null;
+  const [refHtmlImage, setRefHtmlImage] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (!refImage?.dataUrl) { setRefHtmlImage(null); return; }
+    const img = new window.Image();
+    img.src = refImage.dataUrl;
+    img.onload = () => setRefHtmlImage(img);
+  }, [refImage?.dataUrl]);
 
   useEffect(() => {
     registerStage(stageRef.current);
@@ -137,6 +162,13 @@ export function CanvasStage({ width, height }: Props) {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "AltLeft" || e.code === "AltRight") {
+        altDown.current = true;
+        e.preventDefault(); // prevent browser Alt-focus behavior
+      }
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+        shiftDown.current = true;
+      }
       if (e.code === "Space") {
         spaceDown.current = true;
         setSpaceDown(true);
@@ -152,6 +184,12 @@ export function CanvasStage({ width, height }: Props) {
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "AltLeft" || e.code === "AltRight") {
+        altDown.current = false;
+      }
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+        shiftDown.current = false;
+      }
       if (e.code === "Space") {
         spaceDown.current = false;
         setSpaceDown(false);
@@ -171,7 +209,65 @@ export function CanvasStage({ width, height }: Props) {
     setDraftLine(null);
     setDraftRect(null);
     setMeasure(null);
+    setWallEndpointSnap(null);
+    setWallProjectionSnap(null);
   }, [tool]);
+
+  // Constrain a point to the nearest 45° angle from a start point (0°/45°/90°/135°/…).
+  function constrainToAngle(
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+  ): { x: number; y: number } {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) return end;
+    const angle = Math.atan2(dy, dx);
+    const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    return {
+      x: start.x + dist * Math.cos(snappedAngle),
+      y: start.y + dist * Math.sin(snappedAngle),
+    };
+  }
+
+  // Returns the nearest wall endpoint within snapThresholdInches, or null.
+  function findWallEndpointSnap(wp: { x: number; y: number }, thresholdInches: number) {
+    if (!plan) return null;
+    let best: { x: number; y: number } | null = null;
+    let bestDist = thresholdInches;
+    for (const w of plan.walls) {
+      for (const ep of [{ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }]) {
+        const d = distance(wp, ep);
+        if (d < bestDist) {
+          bestDist = d;
+          best = ep;
+        }
+      }
+    }
+    return best;
+  }
+
+  // Returns the nearest projection onto any wall within thresholdInches, or null.
+  function findNearestWallProjection(wp: { x: number; y: number }, thresholdInches: number) {
+    if (!plan) return null;
+    let best: { x: number; y: number; angle: number; wallId: string } | null = null;
+    let bestDist = thresholdInches;
+    for (const w of plan.walls) {
+      const dx = w.x2 - w.x1;
+      const dy = w.y2 - w.y1;
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1) continue;
+      const t = Math.max(0, Math.min(1, ((wp.x - w.x1) * dx + (wp.y - w.y1) * dy) / len2));
+      const px = w.x1 + t * dx;
+      const py = w.y1 + t * dy;
+      const d = Math.sqrt((wp.x - px) ** 2 + (wp.y - py) ** 2);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { x: px, y: py, angle: Math.atan2(dy, dx), wallId: w.id };
+      }
+    }
+    return best;
+  }
 
   function commitPolygon(pts: Point[]) {
     if (pts.length < 3 || !plan) {
@@ -274,18 +370,45 @@ export function CanvasStage({ width, height }: Props) {
         x: Math.max(0, Math.min(wp.x, fw)),
         y: Math.max(0, Math.min(wp.y, fh)),
       };
-      const snapped = snapPoint(clampedWall, plan.gridSize, plan.snapEnabled);
+      // Snap threshold: screen-pixel-based only (no inch minimum).
+      // Hold Alt to bypass all snapping for precise small-wall placement.
+      // Hold Shift to constrain wall to 0°/45°/90° from its start point.
+      const snapThreshold = 16 / (pixelsPerInch * zoom);
+      const epSnap = altDown.current ? null : findWallEndpointSnap(clampedWall, snapThreshold);
+      const baseSnapped = altDown.current
+        ? clampedWall
+        : (epSnap ?? snapPoint(clampedWall, plan.gridSize, plan.snapEnabled));
       if (!draftLine) {
-        setDraftLine({ start: snapped, end: snapped });
+        setDraftLine({ start: baseSnapped, end: baseSnapped });
       } else {
+        const endPt = shiftDown.current
+          ? constrainToAngle(draftLine.start, clampedWall)
+          : baseSnapped;
         addWall({
           x1: draftLine.start.x,
           y1: draftLine.start.y,
-          x2: snapped.x,
-          y2: snapped.y,
+          x2: endPt.x,
+          y2: endPt.y,
           thickness: 4,
         });
         setDraftLine(null);
+        setWallEndpointSnap(null);
+      }
+      return;
+    }
+    if (tool === "door" || tool === "window") {
+      const snapThreshold = 40 / (pixelsPerInch * zoom);
+      const proj = findNearestWallProjection(wp, Math.max(snapThreshold, 18));
+      if (proj) {
+        if (tool === "door") {
+          const newId = addDoor({ x: proj.x, y: proj.y, angle: proj.angle, width: 36, swing: "right", kind: "single", wallId: proj.wallId });
+          setTool("select");
+          setSelection([newId]);
+        } else {
+          const newId = addWindow({ x: proj.x, y: proj.y, angle: proj.angle, width: 36, wallId: proj.wallId });
+          setTool("select");
+          setSelection([newId]);
+        }
       }
       return;
     }
@@ -351,8 +474,29 @@ export function CanvasStage({ width, height }: Props) {
         x: Math.max(0, Math.min(wp.x, fw)),
         y: Math.max(0, Math.min(wp.y, fh)),
       };
-      const snapped = snapPoint(clampedEnd, plan.gridSize, plan.snapEnabled);
-      setDraftLine({ start: draftLine.start, end: snapped });
+      const snapThreshold = 16 / (pixelsPerInch * zoom);
+      const epSnap = altDown.current ? null : findWallEndpointSnap(clampedEnd, snapThreshold);
+      // Don't show endpoint-snap indicator when shift-constraining (angle takes priority)
+      setWallEndpointSnap(shiftDown.current ? null : epSnap);
+      const baseSnapped = altDown.current
+        ? clampedEnd
+        : (epSnap ?? snapPoint(clampedEnd, plan.gridSize, plan.snapEnabled));
+      const finalEnd = shiftDown.current
+        ? constrainToAngle(draftLine.start, clampedEnd)
+        : baseSnapped;
+      setDraftLine({ start: draftLine.start, end: finalEnd });
+    } else if (tool === "wall") {
+      // Detect endpoint snap before the first click too
+      const { width: fw, height: fh } = floorBBox(plan.floor);
+      const clamped = { x: Math.max(0, Math.min(wp.x, fw)), y: Math.max(0, Math.min(wp.y, fh)) };
+      const snapThreshold = 16 / (pixelsPerInch * zoom);
+      setWallEndpointSnap(altDown.current ? null : findWallEndpointSnap(clamped, snapThreshold));
+    }
+    if (tool === "door" || tool === "window") {
+      const snapThreshold = 40 / (pixelsPerInch * zoom);
+      setWallProjectionSnap(findNearestWallProjection(wp, Math.max(snapThreshold, 18)));
+    } else {
+      setWallProjectionSnap(null);
     }
     if (marquee) {
       setMarquee({ start: marquee.start, end: wp });
@@ -451,11 +595,32 @@ export function CanvasStage({ width, height }: Props) {
     clearActiveDrag();
   };
 
-  const totalSqft = sqftFromInches(floorWidth, floorHeight);
+  const storeZone = plan.zones.find((z) => z.isStore) ?? null;
+  let totalSqft: number;
   let occupiedSqft = 0;
-  for (const it of plan.placedItems) {
-    const c = getCatalogItem(it.catalogId);
-    if (c && !c.isAccessory) occupiedSqft += sqftFromInches(c.width, c.depth);
+
+  if (storeZone) {
+    totalSqft = storeZone.kind === "rect"
+      ? sqftFromInches(storeZone.width, storeZone.height)
+      : polygonArea(storeZone.points) / 144;
+    for (const it of plan.placedItems) {
+      const c = getCatalogItem(it.catalogId);
+      if (!c || c.isAccessory) continue;
+      const cx = it.x + c.width / 2;
+      const cy = it.y + c.depth / 2;
+      const inside = storeZone.kind === "rect"
+        ? pointInRect(cx, cy, storeZone.x, storeZone.y, storeZone.width, storeZone.height)
+        : pointInPolygon({ x: cx, y: cy }, storeZone.points);
+      if (inside) occupiedSqft += sqftFromInches(c.width, c.depth);
+    }
+  } else {
+    totalSqft = plan.floor.kind === "polygon"
+      ? polygonArea(plan.floor.points) / 144
+      : sqftFromInches(floorWidth, floorHeight);
+    for (const it of plan.placedItems) {
+      const c = getCatalogItem(it.catalogId);
+      if (c && !c.isAccessory) occupiedSqft += sqftFromInches(c.width, c.depth);
+    }
   }
   const freeSqft = Math.max(0, totalSqft - occupiedSqft);
 
@@ -502,6 +667,21 @@ export function CanvasStage({ width, height }: Props) {
       >
         <Layer ref={layerRef}>
           <FloorLayer floor={plan.floor} pixelsPerInch={pixelsPerInch} />
+          {refHtmlImage && refImage?.visible && (() => {
+            const wPx = refImage.realWidthFt * 12 * pixelsPerInch;
+            const hPx = (refHtmlImage.naturalHeight / refHtmlImage.naturalWidth) * wPx;
+            return (
+              <KonvaImage
+                image={refHtmlImage}
+                x={0}
+                y={0}
+                width={wPx}
+                height={hPx}
+                opacity={refImage.opacity}
+                listening={false}
+              />
+            );
+          })()}
           <GridLayer
             floor={plan.floor}
             gridSize={plan.gridSize}
@@ -545,6 +725,19 @@ export function CanvasStage({ width, height }: Props) {
             onSelect={(id, additive) =>
               additive ? addToSelection(id) : setSelection([id])
             }
+          />
+          <DoorsWindowsLayer
+            doors={plan.doors ?? []}
+            windows={plan.windows ?? []}
+            walls={plan.walls}
+            pixelsPerInch={pixelsPerInch}
+            selectedIds={selectionIds}
+            onSelect={(id, additive) =>
+              additive ? addToSelection(id) : setSelection([id])
+            }
+            toolIsSelect={tool === "select"}
+            onUpdateDoor={updateDoor}
+            onUpdateWindow={updateWindow}
           />
           <ItemsLayer
             plan={plan}
@@ -736,6 +929,66 @@ export function CanvasStage({ width, height }: Props) {
               })()}
             </Group>
           )}
+          {/* Wall endpoint snap indicator */}
+          {tool === "wall" && wallEndpointSnap && (
+            <Group listening={false}>
+              <Circle
+                x={wallEndpointSnap.x * pixelsPerInch}
+                y={wallEndpointSnap.y * pixelsPerInch}
+                radius={9}
+                stroke="#22c55e"
+                strokeWidth={2}
+                fill="rgba(34,197,94,0.15)"
+              />
+              <Circle
+                x={wallEndpointSnap.x * pixelsPerInch}
+                y={wallEndpointSnap.y * pixelsPerInch}
+                radius={3}
+                fill="#22c55e"
+              />
+              <Line
+                points={[
+                  (wallEndpointSnap.x - 14 / pixelsPerInch) * pixelsPerInch,
+                  wallEndpointSnap.y * pixelsPerInch,
+                  (wallEndpointSnap.x + 14 / pixelsPerInch) * pixelsPerInch,
+                  wallEndpointSnap.y * pixelsPerInch,
+                ]}
+                stroke="#22c55e"
+                strokeWidth={1.5}
+                listening={false}
+              />
+              <Line
+                points={[
+                  wallEndpointSnap.x * pixelsPerInch,
+                  (wallEndpointSnap.y - 14 / pixelsPerInch) * pixelsPerInch,
+                  wallEndpointSnap.x * pixelsPerInch,
+                  (wallEndpointSnap.y + 14 / pixelsPerInch) * pixelsPerInch,
+                ]}
+                stroke="#22c55e"
+                strokeWidth={1.5}
+                listening={false}
+              />
+            </Group>
+          )}
+          {/* Wall projection snap indicator (door/window tool) */}
+          {(tool === "door" || tool === "window") && wallProjectionSnap && (
+            <Group listening={false}>
+              <Circle
+                x={wallProjectionSnap.x * pixelsPerInch}
+                y={wallProjectionSnap.y * pixelsPerInch}
+                radius={10}
+                stroke={tool === "door" ? "#f59e0b" : "#06b6d4"}
+                strokeWidth={2}
+                fill={tool === "door" ? "rgba(245,158,11,0.15)" : "rgba(6,182,212,0.15)"}
+              />
+              <Circle
+                x={wallProjectionSnap.x * pixelsPerInch}
+                y={wallProjectionSnap.y * pixelsPerInch}
+                radius={3}
+                fill={tool === "door" ? "#f59e0b" : "#06b6d4"}
+              />
+            </Group>
+          )}
           {/* Draft wall */}
           {draftLine && (
             <Group listening={false}>
@@ -826,9 +1079,19 @@ export function CanvasStage({ width, height }: Props) {
           ✓ Auto-saved · {new Date(plan.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </div>
         <div>Floor: {feetInches(floorWidth, { compact: true })} × {feetInches(floorHeight, { compact: true })}</div>
-        <div>Total: {formatSqft(totalSqft)}</div>
-        <div>Occupied: {formatSqft(occupiedSqft)}</div>
-        <div>Free: {formatSqft(freeSqft)}</div>
+        {storeZone ? (
+          <>
+            <div style={{ color: "#15803d", fontWeight: 600 }}>Store: {formatSqft(totalSqft)}</div>
+            <div>Occupied: {formatSqft(occupiedSqft)}</div>
+            <div>Free: {formatSqft(freeSqft)}</div>
+          </>
+        ) : (
+          <>
+            <div>Total: {formatSqft(totalSqft)}</div>
+            <div>Occupied: {formatSqft(occupiedSqft)}</div>
+            <div>Free: {formatSqft(freeSqft)}</div>
+          </>
+        )}
         {plan.zones.length > 0 && (
           <>
             <div style={{ marginTop: 6, fontWeight: 600 }}>Zones</div>
@@ -845,10 +1108,12 @@ export function CanvasStage({ width, height }: Props) {
                       width: 10,
                       height: 10,
                       background: z.color,
-                      border: "1px solid #aaa",
+                      border: z.isStore ? "2px solid #15803d" : "1px solid #aaa",
                     }}
                   />
-                  <span>{z.name}: {formatSqft(zoneSqft)}</span>
+                  <span style={{ fontWeight: z.isStore ? 600 : 400, color: z.isStore ? "#15803d" : undefined }}>
+                    {z.isStore ? "★ " : ""}{z.name}: {formatSqft(zoneSqft)}
+                  </span>
                 </div>
               );
             })}
@@ -910,6 +1175,22 @@ export function CanvasStage({ width, height }: Props) {
         </div>
       )}
 
+      {/* Ruler overlays */}
+      {showRuler && (
+        <CanvasRuler
+          width={width}
+          height={height}
+          pan={pan}
+          zoom={zoom}
+          pixelsPerInch={pixelsPerInch}
+        />
+      )}
+
+      {/* Scale bar */}
+      {showRuler && (
+        <ScaleBar pixelsPerInch={pixelsPerInch} zoom={zoom} scaleRatio={scaleRatio} />
+      )}
+
       {/* Tool hint */}
       {tool !== "select" && (
         <div
@@ -931,7 +1212,9 @@ export function CanvasStage({ width, height }: Props) {
           {tool === "zonePolygon" && "Click vertices to draw a polygon zone — click first point or double-click to close · Enter commits · Esc cancels"}
           {tool === "nonUsable" && "Click-drag to mark non-usable area"}
           {tool === "nonUsablePolygon" && "Click vertices to draw a free-form non-usable area — click first point or double-click to close · Enter commits · Esc cancels"}
-          {tool === "wall" && "Click two points to draw a wall"}
+          {tool === "wall" && "Click two points to draw a wall · Hold Shift for straight walls (0°/45°/90°) · Hold Alt to bypass snap"}
+          {tool === "door" && "Click on a wall to place a door (36\" default width)"}
+          {tool === "window" && "Click on a wall to place a window (36\" default width)"}
           {tool === "measure" && "Click two points to measure distance"}
           {tool === "delete" && "Click items to delete"}
           {tool !== "zonePolygon" && tool !== "pan" && " — Esc to cancel"}

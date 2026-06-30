@@ -10,6 +10,8 @@ function deleteSelected() {
   const zoneIds = new Set(plan.zones.map((z) => z.id));
   const nuIds = new Set(plan.nonUsable.map((n) => n.id));
   const wallIds = new Set(plan.walls.map((w) => w.id));
+  const doorIds = new Set((plan.doors ?? []).map((d) => d.id));
+  const windowIds = new Set((plan.windows ?? []).map((w) => w.id));
 
   const toDeletePlaced: string[] = [];
   for (const id of s.selectionIds) {
@@ -17,6 +19,8 @@ function deleteSelected() {
     else if (zoneIds.has(id)) s.deleteZone(id);
     else if (nuIds.has(id)) s.deleteNonUsable(id);
     else if (wallIds.has(id)) s.deleteWall(id);
+    else if (doorIds.has(id)) s.deleteDoor(id);
+    else if (windowIds.has(id)) s.deleteWindow(id);
   }
   if (toDeletePlaced.length > 0) s.deletePlacedItems(toDeletePlaced);
   s.clearSelection();
