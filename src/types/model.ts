@@ -12,6 +12,11 @@ export interface CatalogItem {
   defaultColor: string;
   isAccessory: boolean;
   shape: "rect" | "circle";
+  seriesName?: string;
+  imageUrl?: string;
+  friendlyDimensions?: string;
+  price?: number;
+  allImages?: string[];
 }
 
 export interface Point {
@@ -54,6 +59,7 @@ export interface NonUsableRect {
   width: Inches;
   height: Inches;
   label?: string;
+  color?: string;
 }
 
 export interface NonUsablePolygon {
@@ -61,6 +67,7 @@ export interface NonUsablePolygon {
   kind: "polygon";
   points: Point[];
   label?: string;
+  color?: string;
 }
 
 export type NonUsableRegion = NonUsableRect | NonUsablePolygon;
@@ -106,6 +113,8 @@ export interface PlacedItem {
   vendor?: string;
   pricePoint?: string;
   tags?: string[];
+  labelPosition?: "center" | "top" | "bottom" | "left" | "right" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  labelFontSize?: number;
 }
 
 export interface Kit {

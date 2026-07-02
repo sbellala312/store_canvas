@@ -8,6 +8,7 @@ import {
   clearActiveHandle,
   getActiveHandle,
   setActiveHandle,
+  tryRestoreHandle,
 } from "../utils/fileStorage";
 import type { FloorPlan } from "../types/model";
 
@@ -27,8 +28,23 @@ export function FileStorageBar() {
   const [showMenu, setShowMenu] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pendingOpen, setPendingOpen] = useState<PendingOpen | null>(null);
+  const [pendingReconnect, setPendingReconnect] = useState<FileSystemFileHandle | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
+
+  // On mount: try to restore the last-used file handle from IndexedDB.
+  useEffect(() => {
+    tryRestoreHandle().then((result) => {
+      if (!result) return;
+      if (result.autoRestored) {
+        // Permission still active (same browser session) — restore silently.
+        setConnectedFile(result.handle.name);
+      } else {
+        // Need user gesture to re-grant permission — show reconnect banner.
+        setPendingReconnect(result.handle);
+      }
+    });
+  }, []);
 
   // Auto-save ALL plans to the connected file whenever any plan changes
   useEffect(() => {
@@ -125,6 +141,24 @@ export function FileStorageBar() {
     setErrorMsg(null);
   }
 
+  async function handleReconnect() {
+    if (!pendingReconnect) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const perm = await (pendingReconnect as any).requestPermission({ mode: "readwrite" });
+      if (perm !== "granted") { setPendingReconnect(null); return; }
+      // Read current file contents and show the Load/Push dialog
+      const file = await pendingReconnect.getFile();
+      const text = await file.text();
+      let filePlans: FloorPlan[] = [];
+      try { const p = JSON.parse(text); filePlans = Array.isArray(p) ? p : []; } catch { /* empty file */ }
+      setPendingOpen({ handle: pendingReconnect, filePlans });
+    } catch {
+      setErrorMsg("Could not reconnect — file may have been moved or deleted.");
+    }
+    setPendingReconnect(null);
+  }
+
   const statusColor =
     saveStatus === "error" ? "#dc2626" :
     saveStatus === "saving" ? "#d97706" :
@@ -141,6 +175,27 @@ export function FileStorageBar() {
 
   return (
     <>
+      {/* Reconnect banner — shown after refresh when permission needs re-grant */}
+      {pendingReconnect && !connectedFile && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 14px", background: "#fffbeb", borderBottom: "1px solid #fcd34d", fontSize: 12 }}>
+          <span style={{ color: "#92400e" }}>
+            Last session was connected to <b>{pendingReconnect.name}</b> — reconnect to resume auto-saving.
+          </span>
+          <button
+            onClick={handleReconnect}
+            style={{ background: "#1f6feb", color: "white", border: "none", borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 12, fontWeight: 500 }}
+          >
+            Reconnect
+          </button>
+          <button
+            onClick={() => { clearActiveHandle(); setPendingReconnect(null); }}
+            style={{ background: "none", border: "1px solid #c0cad4", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 11, color: "#6b7785" }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Confirmation modal */}
       {pendingOpen && (
         <ConnectDialog

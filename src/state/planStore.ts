@@ -24,6 +24,8 @@ import {
   saveActivePlanId,
   loadKits,
   saveKits,
+  loadScaleRatio,
+  saveScaleRatio,
 } from "../utils/persistence";
 import { CATALOG_BY_ID } from "../data/catalog";
 import { clampRectToFloor, clampPointToFloor, floorBBox } from "../utils/geometry";
@@ -116,6 +118,12 @@ interface Actions {
   setPan: (p: { x: number; y: number }) => void;
   toggleRuler: () => void;
 
+  // Z-order for placed items (within the same tier, last in array renders on top)
+  bringToFront: (id: string) => void;
+  bringForward: (id: string) => void;
+  sendBackward: (id: string) => void;
+  sendToBack: (id: string) => void;
+
   // Bulk replace (used by file storage to load plans from disk)
   replacePlans: (plans: FloorPlan[], activePlanId?: string | null) => void;
 
@@ -173,8 +181,8 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   selectionIds: [],
   zoneEditMode: "view",
   nonUsableEditMode: "view",
-  pixelsPerInch: 2,
-  scaleRatio: 48,
+  scaleRatio: loadScaleRatio(),
+  pixelsPerInch: 96 / loadScaleRatio(),
   zoom: 1,
   pan: { x: 0, y: 0 },
   showRuler: false,
@@ -631,7 +639,7 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   clearSelection: () => set({ selectionIds: [], zoneEditMode: "view", nonUsableEditMode: "view" }),
   setZoneEditMode: (mode) => set({ zoneEditMode: mode, ...(mode !== "view" ? { tool: "select" } : {}) }),
   setNonUsableEditMode: (mode) => set({ nonUsableEditMode: mode, ...(mode !== "view" ? { tool: "select" } : {}) }),
-  setScaleRatio: (n) => set({ scaleRatio: n, pixelsPerInch: 96 / n }),
+  setScaleRatio: (n) => { saveScaleRatio(n); set({ scaleRatio: n, pixelsPerInch: 96 / n }); },
   setZoom: (z) => set({ zoom: Math.max(0.1, Math.min(5, z)) }),
   setPan: (p) => set({ pan: p }),
   toggleRuler: () => set((s) => ({ showRuler: !s.showRuler })),
@@ -687,6 +695,41 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
     const id = get().activePlanId;
     if (!id) return false;
     return (get().history[id]?.future.length ?? 0) > 0;
+  },
+
+  bringToFront: (id) => {
+    get().updateActive((p) => {
+      const idx = p.placedItems.findIndex((i) => i.id === id);
+      if (idx < 0 || idx === p.placedItems.length - 1) return;
+      const [item] = p.placedItems.splice(idx, 1);
+      p.placedItems.push(item);
+    });
+  },
+  bringForward: (id) => {
+    get().updateActive((p) => {
+      const idx = p.placedItems.findIndex((i) => i.id === id);
+      if (idx < 0 || idx === p.placedItems.length - 1) return;
+      const tmp = p.placedItems[idx + 1];
+      p.placedItems[idx + 1] = p.placedItems[idx];
+      p.placedItems[idx] = tmp;
+    });
+  },
+  sendBackward: (id) => {
+    get().updateActive((p) => {
+      const idx = p.placedItems.findIndex((i) => i.id === id);
+      if (idx <= 0) return;
+      const tmp = p.placedItems[idx - 1];
+      p.placedItems[idx - 1] = p.placedItems[idx];
+      p.placedItems[idx] = tmp;
+    });
+  },
+  sendToBack: (id) => {
+    get().updateActive((p) => {
+      const idx = p.placedItems.findIndex((i) => i.id === id);
+      if (idx <= 0) return;
+      const [item] = p.placedItems.splice(idx, 1);
+      p.placedItems.unshift(item);
+    });
   },
 
   replacePlans: (plans, activePlanId) => {

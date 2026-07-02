@@ -76,6 +76,10 @@ export function CanvasStage({ width, height }: Props) {
   const setTool = usePlanStore((s) => s.setTool);
   const showRuler = usePlanStore((s) => s.showRuler);
   const scaleRatio = usePlanStore((s) => s.scaleRatio);
+  const bringToFront = usePlanStore((s) => s.bringToFront);
+  const bringForward = usePlanStore((s) => s.bringForward);
+  const sendBackward = usePlanStore((s) => s.sendBackward);
+  const sendToBack = usePlanStore((s) => s.sendToBack);
 
   const [draftRect, setDraftRect] = useState<DraftRectState | null>(null);
   const [draftLine, setDraftLine] = useState<DraftLineState | null>(null);
@@ -202,6 +206,21 @@ export function CanvasStage({ width, height }: Props) {
       window.removeEventListener("keyup", onKeyUp);
     };
   }, [draftPolygon]);
+
+  // Z-order keyboard shortcuts: ] = bring forward, [ = send backward, Shift variant = to front/back
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (selectionIds.length !== 1) return;
+      const id = selectionIds[0];
+      if (e.key === "]" && e.shiftKey) { e.preventDefault(); bringToFront(id); }
+      else if (e.key === "[" && e.shiftKey) { e.preventDefault(); sendToBack(id); }
+      else if (e.key === "]") { e.preventDefault(); bringForward(id); }
+      else if (e.key === "[") { e.preventDefault(); sendBackward(id); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectionIds, bringToFront, bringForward, sendBackward, sendToBack]);
 
   useEffect(() => {
     // Reset in-flight drafts when switching tools
@@ -1076,7 +1095,7 @@ export function CanvasStage({ width, height }: Props) {
       >
         <div style={{ fontWeight: 600, marginBottom: 2 }}>{plan.name}</div>
         <div style={{ fontSize: 10, color: "#7a9bc0", marginBottom: 4 }}>
-          ✓ Auto-saved · {new Date(plan.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          ✓ Auto-saved · {new Date(plan.updatedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
         </div>
         <div>Floor: {feetInches(floorWidth, { compact: true })} × {feetInches(floorHeight, { compact: true })}</div>
         {storeZone ? (
