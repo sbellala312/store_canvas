@@ -59,3 +59,37 @@ export function loadKits(): Kit[] {
 export function saveKits(kits: Kit[]): void {
   localStorage.setItem(KITS_KEY, JSON.stringify(kits));
 }
+
+const SCALE_KEY = "storeCanvas.scaleRatio";
+
+export function loadScaleRatio(): number {
+  try {
+    const v = localStorage.getItem(SCALE_KEY);
+    return v ? parseFloat(v) : 48;
+  } catch {
+    return 48;
+  }
+}
+
+export function saveScaleRatio(n: number): void {
+  localStorage.setItem(SCALE_KEY, String(n));
+}
+
+const REF_IMAGES_KEY = "storeCanvas.refImages";
+
+export function loadRefImages(): Record<string, unknown> {
+  try {
+    const raw = localStorage.getItem(REF_IMAGES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveRefImages(images: Record<string, unknown>): void {
+  try {
+    localStorage.setItem(REF_IMAGES_KEY, JSON.stringify(images));
+  } catch {
+    // Quota exceeded (large image data URLs) — skip silently
+  }
+}

@@ -1,5 +1,43 @@
 import type { CatalogItem } from "../types/model";
 
+// Runtime cache populated by Azure Search results so getCatalogItem works for
+// dynamically loaded items (placed items reference catalogId which must resolve here).
+// The cache is persisted to localStorage so placed items render correctly on fresh load.
+const CACHE_KEY = "storeCanvas.catalogCache";
+
+function loadCatalogCache(): Map<string, CatalogItem> {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return new Map();
+    const arr: CatalogItem[] = JSON.parse(raw);
+    return new Map(arr.map((i) => [i.id, i]));
+  } catch {
+    return new Map();
+  }
+}
+
+const catalogCache = loadCatalogCache();
+
+export function addToCatalogCache(items: CatalogItem[]): void {
+  for (const item of items) catalogCache.set(item.id, item);
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(Array.from(catalogCache.values())));
+  } catch {
+    // localStorage quota exceeded — keep in memory only
+  }
+}
+
+// Group any CatalogItem array by category → subcategory (same shape as groupedCatalog).
+export function groupItems(items: CatalogItem[]): Record<string, Record<string, CatalogItem[]>> {
+  const out: Record<string, Record<string, CatalogItem[]>> = {};
+  for (const item of items) {
+    out[item.category] ??= {};
+    out[item.category][item.subcategory] ??= [];
+    out[item.category][item.subcategory].push(item);
+  }
+  return out;
+}
+
 export const CATALOG: CatalogItem[] = [
   // Living Room
   { id: "lr-sofa-3", name: "3-Seat Sofa", category: "Living Room", subcategory: "Sofas", width: 84, depth: 38, height: 34, defaultColor: "#7b9acc", isAccessory: false, shape: "rect" },
@@ -39,7 +77,7 @@ export const CATALOG: CatalogItem[] = [
 export const CATALOG_BY_ID = new Map(CATALOG.map((i) => [i.id, i]));
 
 export function getCatalogItem(id: string): CatalogItem | undefined {
-  return CATALOG_BY_ID.get(id);
+  return catalogCache.get(id) ?? CATALOG_BY_ID.get(id);
 }
 
 export function groupedCatalog(): Record<string, Record<string, CatalogItem[]>> {

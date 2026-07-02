@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { loadRefImages, saveRefImages } from "../utils/persistence";
 
 export interface RefImage {
   dataUrl: string;
@@ -22,7 +23,7 @@ interface RefImageStore {
 }
 
 export const useRefImageStore = create<RefImageStore>((set) => ({
-  refImages: {},
+  refImages: loadRefImages() as Record<string, RefImage>,
   setRefImage: (planId, img) =>
     set((s) => {
       const next = { ...s.refImages };
@@ -31,12 +32,15 @@ export const useRefImageStore = create<RefImageStore>((set) => ({
       } else {
         next[planId] = img;
       }
+      saveRefImages(next);
       return { refImages: next };
     }),
   update: (planId, patch) =>
     set((s) => {
       const cur = s.refImages[planId];
       if (!cur) return {};
-      return { refImages: { ...s.refImages, [planId]: { ...cur, ...patch } } };
+      const next = { ...s.refImages, [planId]: { ...cur, ...patch } };
+      saveRefImages(next);
+      return { refImages: next };
     }),
 }));

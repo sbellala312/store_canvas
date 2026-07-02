@@ -23,6 +23,7 @@ interface Props {
 }
 
 function hexToRgba(hex: string, alpha: number): string {
+  if (hex === "none" || hex === "transparent") return `rgba(107,119,133,${alpha})`;
   const h = hex.replace("#", "");
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
@@ -177,6 +178,9 @@ export function ZonesLayer({
           const bboxPxH = bbox.height * pixelsPerInch;
           const polySqft = polygonArea(z.points) / 144;
           const sqftFontSize = Math.max(12, Math.min(20, Math.min(bboxPxW, bboxPxH) * 0.12));
+          const noFill = z.color === "none";
+          const zoneFill = noFill ? "transparent" : hexToRgba(z.color, 0.14);
+          const zoneStroke = selected ? "#1f6feb" : (noFill ? "#9aa5b1" : z.color);
           return (
             <Group
               key={z.id}
@@ -202,8 +206,8 @@ export function ZonesLayer({
               <Line
                 points={flat}
                 closed
-                fill={hexToRgba(z.color, 0.14)}
-                stroke={selected ? "#1f6feb" : z.color}
+                fill={zoneFill}
+                stroke={zoneStroke}
                 strokeWidth={selected ? 2 : 1.25}
                 dash={selected ? undefined : [6, 4]}
               />
@@ -242,6 +246,9 @@ export function ZonesLayer({
         const h = z.height * pixelsPerInch;
         const rectSqft = sqftFromInches(z.width, z.height);
         const rectSqftFontSize = Math.max(12, Math.min(20, Math.min(w, h) * 0.12));
+        const noFillR = z.color === "none";
+        const rectFill = noFillR ? "transparent" : hexToRgba(z.color, 0.14);
+        const rectStroke = selected ? "#1f6feb" : (noFillR ? "#9aa5b1" : z.color);
         return (
           <Group
             key={z.id}
@@ -267,8 +274,8 @@ export function ZonesLayer({
             <Rect
               width={w}
               height={h}
-              fill={hexToRgba(z.color, 0.14)}
-              stroke={selected ? "#1f6feb" : z.color}
+              fill={rectFill}
+              stroke={rectStroke}
               strokeWidth={selected ? 2 : 1}
               dash={selected ? undefined : [6, 4]}
             />

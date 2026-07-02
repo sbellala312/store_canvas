@@ -8,6 +8,15 @@ import { usePlanStore } from "../../state/planStore";
 import { isSpaceDown } from "../../utils/panMode";
 import { sqftFromInches, formatSqft } from "../../utils/units";
 
+function hexToRgba(hex: string, alpha: number): string {
+  if (hex === "none" || hex === "transparent") return `rgba(107,119,133,${alpha})`;
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // Module-level hatch pattern canvas — created once, no clip-Group needed.
 function buildHatchPattern(): HTMLCanvasElement {
   const size = 10;
@@ -193,6 +202,9 @@ export function NonUsableLayer({
           const labelFontSize = Math.max(14, Math.min(32, minDim * 0.18));
           const labelWidth = Math.max(20, bboxPxW - 16);
 
+          const nuNoFill = r.color === "none";
+          const nuHasColor = r.color != null && r.color !== "none";
+          const nuPolyStroke = selected ? "#1f6feb" : (nuHasColor ? r.color! : "#6b7785");
           return (
             <Group
               key={r.id}
@@ -207,14 +219,13 @@ export function NonUsableLayer({
               onClick={(e) => { e.cancelBubble = true; onSelect(r.id, e.evt.shiftKey); }}
               onTap={(e) => { e.cancelBubble = true; onSelect(r.id, false); }}
             >
-              <Line
-                points={flat}
-                closed
-                fillPatternImage={HATCH_PATTERN as unknown as HTMLImageElement}
-                fillPatternRepeat="repeat"
-                stroke={selected ? "#1f6feb" : "#6b7785"}
-                strokeWidth={selected ? 2 : 1}
-              />
+              {nuHasColor ? (
+                <Line points={flat} closed fill={hexToRgba(r.color!, 0.2)} stroke={nuPolyStroke} strokeWidth={selected ? 2 : 1} dash={selected ? undefined : [6, 4]} />
+              ) : nuNoFill ? (
+                <Line points={flat} closed fill="transparent" stroke={nuPolyStroke} strokeWidth={selected ? 2 : 1} dash={selected ? undefined : [6, 4]} />
+              ) : (
+                <Line points={flat} closed fillPatternImage={HATCH_PATTERN as unknown as HTMLImageElement} fillPatternRepeat="repeat" stroke={nuPolyStroke} strokeWidth={selected ? 2 : 1} />
+              )}
               {!hideLabels && (
                 <Text
                   x={cx - labelWidth / 2}
@@ -252,6 +263,9 @@ export function NonUsableLayer({
         const sqft = sqftFromInches(r.width, r.height);
         const sqftFontSize = Math.max(12, Math.min(20, Math.min(w, h) * 0.12));
         const labelText = (r.label ?? "Non-usable").toUpperCase();
+        const rNoFill = r.color === "none";
+        const rHasColor = r.color != null && r.color !== "none";
+        const rStroke = selected ? "#1f6feb" : (rHasColor ? r.color! : "#6b7785");
 
         return (
           <Group
@@ -267,14 +281,13 @@ export function NonUsableLayer({
             onClick={(e) => { e.cancelBubble = true; onSelect(r.id, e.evt.shiftKey); }}
             onTap={(e) => { e.cancelBubble = true; onSelect(r.id, false); }}
           >
-            <Rect
-              width={w}
-              height={h}
-              fillPatternImage={HATCH_PATTERN as unknown as HTMLImageElement}
-              fillPatternRepeat="repeat"
-              stroke={selected ? "#1f6feb" : "#6b7785"}
-              strokeWidth={selected ? 2 : 1}
-            />
+            {rHasColor ? (
+              <Rect width={w} height={h} fill={hexToRgba(r.color!, 0.2)} stroke={rStroke} strokeWidth={selected ? 2 : 1} dash={selected ? undefined : [6, 4]} />
+            ) : rNoFill ? (
+              <Rect width={w} height={h} fill="transparent" stroke={rStroke} strokeWidth={selected ? 2 : 1} dash={selected ? undefined : [6, 4]} />
+            ) : (
+              <Rect width={w} height={h} fillPatternImage={HATCH_PATTERN as unknown as HTMLImageElement} fillPatternRepeat="repeat" stroke={rStroke} strokeWidth={selected ? 2 : 1} />
+            )}
             {!hideLabels && <NonUsableLabel text={labelText} bboxWidth={w} bboxHeight={h} />}
             {!hideLabels && (
               <Text

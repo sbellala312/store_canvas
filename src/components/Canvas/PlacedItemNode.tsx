@@ -28,7 +28,8 @@ export function PlacedItemNode({
 
   const w = catalog.width * pixelsPerInch;
   const h = catalog.depth * pixelsPerInch;
-  const color = item.color ?? catalog.defaultColor;
+  const rawColor = item.color ?? catalog.defaultColor;
+  const color = rawColor === "none" ? "transparent" : rawColor;
   const isAccessory = catalog.isAccessory;
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
