@@ -115,6 +115,9 @@ export interface PlacedItem {
   tags?: string[];
   labelPosition?: "center" | "top" | "bottom" | "left" | "right" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
   labelFontSize?: number;
+  labelRotation?: number;
+  labelCalloutOffset?: { dx: number; dy: number };
+  labelCalloutOpacity?: number;
 }
 
 export interface Kit {
