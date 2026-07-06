@@ -1,4 +1,5 @@
 import type { CatalogItem } from "../types/model";
+import { GLB_BY_ID } from "./glbModels";
 
 // Runtime cache populated by Azure Search results so getCatalogItem works for
 // dynamically loaded items (placed items reference catalogId which must resolve here).
@@ -77,7 +78,7 @@ export const CATALOG: CatalogItem[] = [
 export const CATALOG_BY_ID = new Map(CATALOG.map((i) => [i.id, i]));
 
 export function getCatalogItem(id: string): CatalogItem | undefined {
-  return catalogCache.get(id) ?? CATALOG_BY_ID.get(id);
+  return catalogCache.get(id) ?? CATALOG_BY_ID.get(id) ?? GLB_BY_ID.get(id);
 }
 
 export function groupedCatalog(): Record<string, Record<string, CatalogItem[]>> {
