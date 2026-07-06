@@ -803,6 +803,38 @@ function PlacedItemPanel({ placed, cat }: { placed: PlacedItem; cat: CatalogItem
             <button style={{ ...btnStyle, padding: "2px 8px", fontSize: 10, width: "auto" }} onClick={() => updatePlacedItem(id, { labelFontSize: undefined })}>Auto</button>
           )}
         </div>
+        {/* Text rotation */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: "#6b7785", flexShrink: 0 }}>Rotate text</span>
+          {([0, 90, -90] as const).map((r) => {
+            const active = (placed.labelRotation ?? 0) === r;
+            return (
+              <button
+                key={r}
+                onClick={() => updatePlacedItem(id, { labelRotation: r === 0 ? undefined : r })}
+                style={{ ...btnStyle, padding: "2px 8px", fontSize: 11, width: "auto", background: active ? "#1f6feb" : undefined, color: active ? "white" : undefined }}
+              >
+                {r === 0 ? "0°" : r === 90 ? "+90°" : "−90°"}
+              </button>
+            );
+          })}
+        </div>
+        {/* Callout label opacity (affects the annotation box for thin items like mirrors) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: "#6b7785", flexShrink: 0 }}>Label opacity</span>
+          {([0.3, 0.55, 0.85, 1] as const).map((o) => {
+            const active = Math.round((placed.labelCalloutOpacity ?? 0.85) * 100) === Math.round(o * 100);
+            return (
+              <button
+                key={o}
+                onClick={() => updatePlacedItem(id, { labelCalloutOpacity: o === 0.85 ? undefined : o })}
+                style={{ ...btnStyle, padding: "2px 6px", fontSize: 10, width: "auto", background: active ? "#1f6feb" : undefined, color: active ? "white" : undefined }}
+              >
+                {Math.round(o * 100)}%
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <hr style={hr} />
