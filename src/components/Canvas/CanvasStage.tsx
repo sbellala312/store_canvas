@@ -1063,11 +1063,12 @@ export function CanvasStage({ width, height }: Props) {
                     />
                     <Text
                       x={(measure.a.x + end.x) / 2 * pixelsPerInch + 6}
-                      y={(measure.a.y + end.y) / 2 * pixelsPerInch - 14}
-                      text={feetInches(d, { compact: true })}
+                      y={(measure.a.y + end.y) / 2 * pixelsPerInch - 18}
+                      text={`${feetInches(d, { compact: true })}\n${parseFloat(d.toFixed(2))}"`}
                       fontSize={13}
                       fill="#d97706"
                       fontStyle="bold"
+                      lineHeight={1.4}
                     />
                   </>
                 );
@@ -1111,10 +1112,10 @@ export function CanvasStage({ width, height }: Props) {
             <div>Free: {formatSqft(freeSqft)}</div>
           </>
         )}
-        {plan.zones.length > 0 && (
+        {plan.zones.filter((z) => !z.isStore).length > 0 && (
           <>
             <div style={{ marginTop: 6, fontWeight: 600 }}>Zones</div>
-            {plan.zones.map((z) => {
+            {plan.zones.filter((z) => !z.isStore).map((z) => {
               const zoneSqft =
                 z.kind === "polygon"
                   ? polygonArea(z.points) / 144
@@ -1127,17 +1128,15 @@ export function CanvasStage({ width, height }: Props) {
                       width: 10,
                       height: 10,
                       background: z.color,
-                      border: z.isStore ? "2px solid #15803d" : "1px solid #aaa",
+                      border: "1px solid #aaa",
                     }}
                   />
-                  <span style={{ fontWeight: z.isStore ? 600 : 400, color: z.isStore ? "#15803d" : undefined }}>
-                    {z.isStore ? "★ " : ""}{z.name}: {formatSqft(zoneSqft)}
-                  </span>
+                  <span>{z.name}: {formatSqft(zoneSqft)}</span>
                 </div>
               );
             })}
             <div style={{ fontSize: 11, color: "#6b7785", marginTop: 2 }}>
-              Total zones: {formatSqft(plan.zones.reduce((sum, z) =>
+              Total zones: {formatSqft(plan.zones.filter((z) => !z.isStore).reduce((sum, z) =>
                 sum + (z.kind === "polygon" ? polygonArea(z.points) / 144 : sqftFromInches(z.width, z.height)), 0
               ))}
             </div>

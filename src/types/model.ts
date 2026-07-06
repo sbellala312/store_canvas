@@ -17,6 +17,7 @@ export interface CatalogItem {
   friendlyDimensions?: string;
   price?: number;
   allImages?: string[];
+  glbUrl?: string;
 }
 
 export interface Point {
