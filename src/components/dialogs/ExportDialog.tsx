@@ -1,7 +1,9 @@
 import { Modal } from "./Modal";
 import { usePlanStore } from "../../state/planStore";
+import { useRefImageStore } from "../../state/refImageStore";
 import { getStage } from "../../utils/stageRef";
 import { exportPNG, exportPDF } from "../../utils/export";
+import { exportVectorPDF } from "../../utils/exportVector";
 
 interface Props {
   onClose: () => void;
@@ -9,12 +11,23 @@ interface Props {
 
 export function ExportDialog({ onClose }: Props) {
   const plan = usePlanStore((s) => s.getActivePlan());
+  const pixelsPerInch = usePlanStore((s) => s.pixelsPerInch);
+  const refImages = useRefImageStore((s) => s.refImages);
+  const refImage = plan ? refImages[plan.id] ?? null : null;
+  const furnitureOutline = usePlanStore((s) => s.furnitureOutline);
 
-  const doExport = (format: "png" | "pdf") => {
-    const stage = getStage();
-    if (!stage || !plan) return;
-    if (format === "png") exportPNG(stage, plan);
-    else exportPDF(stage, plan);
+  const doExport = (format: "png" | "pdf" | "vector") => {
+    if (!plan) return;
+    if (format === "vector") {
+      // Vector PDF — sharp at any zoom, drawn from plan data (no stage needed).
+      exportVectorPDF(plan, refImage, furnitureOutline);
+    } else {
+      // Raster PNG / PDF — rendered off-screen at the best resolution the browser allows.
+      const stage = getStage();
+      if (!stage) return;
+      if (format === "png") exportPNG(stage, plan, pixelsPerInch);
+      else exportPDF(stage, plan, pixelsPerInch);
+    }
     onClose();
   };
 
@@ -27,15 +40,19 @@ export function ExportDialog({ onClose }: Props) {
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <button style={btn} onClick={() => doExport("png")}>
-          PNG image
+          PNG Image
         </button>
         <button style={btn} onClick={() => doExport("pdf")}>
-          PDF document
+          PDF File
+        </button>
+        <button style={btn} onClick={() => doExport("vector")}>
+          Vector PDF
         </button>
       </div>
       <div style={{ fontSize: 11, color: "#6b7785", marginTop: 12 }}>
-        Note: zoom and pan are baked in. For a clean output, click <b>Fit</b> in the
-        toolbar first.
+        The whole plan is exported (not just the current view).<br />
+        <b>PNG Image</b> / <b>PDF File</b> are high-resolution images at the best size your
+        browser can produce. <b>Vector PDF</b> stays perfectly sharp at any zoom — best for detail.
       </div>
     </Modal>
   );

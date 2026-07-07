@@ -31,6 +31,12 @@ export default function App() {
     if (plans.length === 0) setShowNew(true);
   }, [plans.length]);
 
+  // Heal placed items whose catalog spec was lost from the local cache by re-fetching
+  // it from Azure and embedding it, so previously-missing furniture reappears and stays.
+  useEffect(() => {
+    void usePlanStore.getState().recoverPlacedItemSpecs();
+  }, []);
+
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
 

@@ -181,6 +181,46 @@ export async function searchAshleyCatalog(query: string, top = 100): Promise<Cat
   return items;
 }
 
+// Escapes single quotes for an OData filter literal ('' is an escaped quote).
+function escapeOData(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+// Resolves a single catalog item by its exact ItemSKU. Used to heal placed items
+// whose catalog spec was lost from the local cache. Returns null if no match.
+export async function findCatalogItemBySku(sku: string): Promise<CatalogItem | null> {
+  const trimmed = sku.trim();
+  if (!trimmed || !API_KEY || !INDEX) return null;
+
+  const url = `${PROXY_BASE}/indexes/${INDEX}/docs/search?api-version=${API_VERSION}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "api-key": API_KEY },
+      body: JSON.stringify({
+        search: "*",
+        top: 1,
+        filter: `ItemSKU eq '${escapeOData(trimmed)}' and mainImage eq true`,
+      }),
+    });
+    if (res.ok) {
+      const data: { value: Record<string, unknown>[] } = await res.json();
+      const doc = data.value?.[0];
+      const item = doc ? mapDoc(doc) : null;
+      if (item) {
+        addToCatalogCache([item]);
+        return item;
+      }
+    }
+  } catch (e) {
+    console.warn("[AzureSearch] findCatalogItemBySku error:", e);
+  }
+
+  // Fallback: full-text search, pick an exact SKU match (case-insensitive).
+  const results = await searchAshleyCatalog(trimmed, 25).catch(() => []);
+  return results.find((r) => r.id.toLowerCase() === trimmed.toLowerCase()) ?? null;
+}
+
 // Fallback search without the mainImage filter — used to explore raw field names
 async function searchWithoutFilter(query: string, top: number): Promise<CatalogItem[]> {
   const url = `${PROXY_BASE}/indexes/${INDEX}/docs/search?api-version=${API_VERSION}`;

@@ -110,6 +110,9 @@ export interface PlacedItem {
   rotation: number;
   color?: string;
   parentId?: ID;
+  // Embedded render spec so the item always draws even if the catalog cache is
+  // evicted (e.g. localStorage quota). Populated on placement; see planStore.
+  spec?: CatalogItem;
   sku?: string;
   vendor?: string;
   pricePoint?: string;

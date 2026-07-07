@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { loadRefImages, saveRefImages } from "../utils/persistence";
+import { loadRefImages, clearLegacyRefImages } from "../utils/persistence";
+import {
+  loadAllRefImagesIDB,
+  putRefImageIDB,
+  deleteRefImageIDB,
+} from "../utils/refImageStorage";
 
 export interface RefImage {
   dataUrl: string;
@@ -22,25 +27,49 @@ interface RefImageStore {
   update: (planId: string, patch: Partial<RefImage>) => void;
 }
 
+// Ref images are persisted in IndexedDB (see refImageStorage.ts), not localStorage,
+// so their large data URLs no longer exhaust the localStorage quota. The store starts
+// empty and is populated asynchronously by initRefImages() below.
 export const useRefImageStore = create<RefImageStore>((set) => ({
-  refImages: loadRefImages() as Record<string, RefImage>,
+  refImages: {},
   setRefImage: (planId, img) =>
     set((s) => {
       const next = { ...s.refImages };
       if (img === null) {
         delete next[planId];
+        void deleteRefImageIDB(planId);
       } else {
         next[planId] = img;
+        void putRefImageIDB(planId, img);
       }
-      saveRefImages(next);
       return { refImages: next };
     }),
   update: (planId, patch) =>
     set((s) => {
       const cur = s.refImages[planId];
       if (!cur) return {};
-      const next = { ...s.refImages, [planId]: { ...cur, ...patch } };
-      saveRefImages(next);
-      return { refImages: next };
+      const nextImg = { ...cur, ...patch };
+      void putRefImageIDB(planId, nextImg);
+      return { refImages: { ...s.refImages, [planId]: nextImg } };
     }),
 }));
+
+// Load ref images from IndexedDB on startup, migrating any legacy localStorage images
+// (which used to blow the quota) into IndexedDB and then clearing the old copy.
+async function initRefImages(): Promise<void> {
+  const fromIDB = await loadAllRefImagesIDB();
+  if (Object.keys(fromIDB).length > 0) {
+    useRefImageStore.setState({ refImages: fromIDB });
+    return;
+  }
+  const legacy = loadRefImages() as Record<string, RefImage>;
+  if (legacy && Object.keys(legacy).length > 0) {
+    await Promise.all(
+      Object.entries(legacy).map(([planId, img]) => putRefImageIDB(planId, img))
+    );
+    useRefImageStore.setState({ refImages: legacy });
+    clearLegacyRefImages();
+  }
+}
+
+void initRefImages();

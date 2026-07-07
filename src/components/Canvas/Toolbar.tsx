@@ -16,19 +16,18 @@ interface Props {
 const TOOLS: { id: Tool; label: string; shortcut?: string }[] = [
   { id: "select", label: "Select", shortcut: "V" },
   { id: "pan", label: "✋ Pan", shortcut: "H" },
-  { id: "zone", label: "Zone (rect)" },
-  { id: "zonePolygon", label: "Zone (free)" },
-  { id: "nonUsable", label: "Non-usable" },
-  { id: "nonUsablePolygon", label: "Non-usable (free)" },
   { id: "wall", label: "Wall" },
   { id: "door", label: "Door" },
   { id: "window", label: "Window" },
+  { id: "zonePolygon", label: "Zone" },
+  { id: "nonUsablePolygon", label: "Non-usable" },
   { id: "measure", label: "Measure", shortcut: "M" },
 ];
 
 export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKit, onComparePlans }: Props) {
   const [exportDataOpen, setExportDataOpen] = useState(false);
   const [refOpen, setRefOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -47,10 +46,10 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
   const toggleLabels = usePlanStore((s) => s.toggleLabels);
   const showRuler = usePlanStore((s) => s.showRuler);
   const toggleRuler = usePlanStore((s) => s.toggleRuler);
-  const scaleRatio = usePlanStore((s) => s.scaleRatio);
-  const setScaleRatio = usePlanStore((s) => s.setScaleRatio);
-  const [scaleOpen, setScaleOpen] = useState(false);
-  const [customRatio, setCustomRatio] = useState("");
+  const visibility = usePlanStore((s) => s.visibility);
+  const toggleVisibility = usePlanStore((s) => s.toggleVisibility);
+  const furnitureOutline = usePlanStore((s) => s.furnitureOutline);
+  const toggleFurnitureOutline = usePlanStore((s) => s.toggleFurnitureOutline);
 
   const undo = usePlanStore((s) => s.undo);
   const redo = usePlanStore((s) => s.redo);
@@ -165,20 +164,101 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
       </button>
       <div style={divider} />
       {plan && (
-        <>
-          <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-            <input type="checkbox" checked={plan.showGrid} onChange={toggleGrid} /> Grid
-          </label>
-          <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-            <input type="checkbox" checked={plan.snapEnabled} onChange={toggleSnap} /> Snap
-          </label>
-          <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-            <input type="checkbox" checked={plan.showLabels} onChange={toggleLabels} /> Labels
-          </label>
-          <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }} title="Show scale ruler and scale bar">
-            <input type="checkbox" checked={showRuler} onChange={toggleRuler} /> Ruler
-          </label>
-        </>
+        <div style={{ position: "relative" }}>
+          <button
+            style={btn(layersOpen)}
+            onClick={() => setLayersOpen((o) => !o)}
+            title="Show/hide layers and display options"
+          >
+            👁 Layers
+          </button>
+          {layersOpen && (
+            <>
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 99 }}
+                onClick={() => setLayersOpen(false)}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: 4,
+                  background: "white",
+                  border: "1px solid #c0cad4",
+                  borderRadius: 6,
+                  boxShadow: "0 4px 14px rgba(0,0,0,0.15)",
+                  zIndex: 100,
+                  width: 180,
+                  padding: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  fontSize: 12,
+                  color: "#2d3742",
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Visible layers</div>
+                {([
+                  { key: "store", label: "Store", hint: "Floor, walls, doors & windows" },
+                  { key: "zones", label: "Zones", hint: "Zones & non-usable regions" },
+                  { key: "furniture", label: "Furniture", hint: "Placed items" },
+                ] as const).map(({ key, label, hint }) => (
+                  <label
+                    key={key}
+                    style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+                    title={hint}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visibility[key]}
+                      onChange={() => toggleVisibility(key)}
+                    />
+                    {label}
+                  </label>
+                ))}
+                {/* Sub-option: furniture as borders + labels only (no fill) */}
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginLeft: 18,
+                    cursor: visibility.furniture ? "pointer" : "default",
+                    opacity: visibility.furniture ? 1 : 0.45,
+                  }}
+                  title="Show furniture as outlines + labels only (no fill)"
+                >
+                  <input
+                    type="checkbox"
+                    checked={furnitureOutline}
+                    disabled={!visibility.furniture}
+                    onChange={toggleFurnitureOutline}
+                  />
+                  Furniture outlines only
+                </label>
+
+                <div style={{ borderTop: "1px solid #e8edf2", margin: "2px 0" }} />
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Display</div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={plan.showGrid} onChange={toggleGrid} /> Grid
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={plan.snapEnabled} onChange={toggleSnap} /> Snap
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={plan.showLabels} onChange={toggleLabels} /> Labels
+                </label>
+                <label
+                  style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+                  title="Show scale ruler and scale bar"
+                >
+                  <input type="checkbox" checked={showRuler} onChange={toggleRuler} /> Ruler
+                </label>
+              </div>
+            </>
+          )}
+        </div>
       )}
       <div style={divider} />
       <button style={btn(false)} onClick={() => setZoom(zoom / 1.2)}>−</button>
@@ -195,120 +275,6 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
       >
         Fit
       </button>
-      <div style={divider} />
-      {/* Scale picker */}
-      <div style={{ position: "relative" }}>
-        <button
-          style={btn(scaleRatio !== 48)}
-          onClick={() => setScaleOpen((o) => !o)}
-          title="Set drawing scale (e.g. 1:48 means 1 screen inch = 4 real feet)"
-        >
-          1:{scaleRatio}
-        </button>
-        {scaleOpen && (
-          <>
-            <div
-              style={{ position: "fixed", inset: 0, zIndex: 99 }}
-              onClick={() => setScaleOpen(false)}
-            />
-            <div
-              style={{
-                position: "absolute",
-                top: "100%",
-                left: 0,
-                marginTop: 4,
-                background: "white",
-                border: "1px solid #c0cad4",
-                borderRadius: 6,
-                boxShadow: "0 4px 14px rgba(0,0,0,0.15)",
-                zIndex: 100,
-                width: 200,
-                padding: 12,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                fontSize: 12,
-                color: "#2d3742",
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 13 }}>Drawing Scale</div>
-              <div style={{ color: "#6b7785", fontSize: 11 }}>
-                1 screen inch = 1:{scaleRatio} real world
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {([
-                  { ratio: 24,  label: "1:24  (½\"=1')" },
-                  { ratio: 48,  label: "1:48  (¼\"=1')" },
-                  { ratio: 96,  label: "1:96  (⅛\"=1')" },
-                  { ratio: 128, label: "1:128 (3/32\"=1')" },
-                  { ratio: 192, label: "1:192 (1/16\"=1')" },
-                ] as const).map(({ ratio, label }) => (
-                  <button
-                    key={ratio}
-                    style={{
-                      ...btn(scaleRatio === ratio),
-                      textAlign: "left",
-                      fontFamily: "monospace",
-                      fontSize: 11,
-                    }}
-                    onClick={() => {
-                      setScaleRatio(ratio);
-                      setScaleOpen(false);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ borderTop: "1px solid #e0e8f0", paddingTop: 8 }}>
-                <div style={{ fontSize: 11, color: "#6b7785", marginBottom: 4 }}>Custom ratio:</div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <span style={{ fontSize: 12 }}>1 :</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10000}
-                    step={1}
-                    value={customRatio}
-                    placeholder={String(scaleRatio)}
-                    onChange={(e) => setCustomRatio(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const n = parseInt(customRatio, 10);
-                        if (n >= 1 && n <= 10000) {
-                          setScaleRatio(n);
-                          setCustomRatio("");
-                          setScaleOpen(false);
-                        }
-                      }
-                    }}
-                    style={{
-                      width: 80,
-                      padding: "4px 6px",
-                      border: "1px solid #c0cad4",
-                      borderRadius: 4,
-                      fontSize: 12,
-                    }}
-                  />
-                  <button
-                    style={btn(false)}
-                    onClick={() => {
-                      const n = parseInt(customRatio, 10);
-                      if (n >= 1 && n <= 10000) {
-                        setScaleRatio(n);
-                        setCustomRatio("");
-                        setScaleOpen(false);
-                      }
-                    }}
-                  >
-                    Set
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
       <div style={divider} />
       <button style={btn(false)} onClick={onExport}>⬇ Export</button>
       <div style={{ position: "relative" }}>

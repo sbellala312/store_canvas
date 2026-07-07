@@ -59,6 +59,7 @@ export function CanvasStage({ width, height }: Props) {
   const selectionIds = usePlanStore((s) => s.selectionIds);
   const zoneEditMode = usePlanStore((s) => s.zoneEditMode);
   const nonUsableEditMode = usePlanStore((s) => s.nonUsableEditMode);
+  const visibility = usePlanStore((s) => s.visibility);
   const setSelection = usePlanStore((s) => s.setSelection);
   const addToSelection = usePlanStore((s) => s.addToSelection);
   const clearSelection = usePlanStore((s) => s.clearSelection);
@@ -685,7 +686,9 @@ export function CanvasStage({ width, height }: Props) {
         }}
       >
         <Layer ref={layerRef}>
-          <FloorLayer floor={plan.floor} pixelsPerInch={pixelsPerInch} />
+          {visibility.store && (
+            <FloorLayer floor={plan.floor} pixelsPerInch={pixelsPerInch} />
+          )}
           {refHtmlImage && refImage?.visible && (() => {
             const wPx = refImage.realWidthFt * 12 * pixelsPerInch;
             const hPx = (refHtmlImage.naturalHeight / refHtmlImage.naturalWidth) * wPx;
@@ -707,69 +710,79 @@ export function CanvasStage({ width, height }: Props) {
             pixelsPerInch={pixelsPerInch}
             visible={plan.showGrid}
           />
-          <ZonesLayer
-            zones={plan.zones}
-            nonUsable={plan.nonUsable}
-            pixelsPerInch={pixelsPerInch}
-            selectedIds={selectionIds}
-            onSelect={(id, additive) =>
-              additive ? addToSelection(id) : setSelection([id])
-            }
-            toolIsSelect={tool === "select"}
-            gridSize={plan.gridSize}
-            snapEnabled={plan.snapEnabled}
-            zoneEditMode={zoneEditMode}
-            hideLabels
-            onSnapGuides={setSnapGuides}
-          />
-          <NonUsableLayer
-            regions={plan.nonUsable}
-            zones={plan.zones}
-            pixelsPerInch={pixelsPerInch}
-            selectedIds={selectionIds}
-            onSelect={(id, additive) =>
-              additive ? addToSelection(id) : setSelection([id])
-            }
-            toolIsSelect={tool === "select"}
-            gridSize={plan.gridSize}
-            snapEnabled={plan.snapEnabled}
-            nonUsableEditMode={nonUsableEditMode}
-            hideLabels
-            onSnapGuides={setSnapGuides}
-          />
-          <WallsLayer
-            walls={plan.walls}
-            pixelsPerInch={pixelsPerInch}
-            selectedIds={selectionIds}
-            onSelect={(id, additive) =>
-              additive ? addToSelection(id) : setSelection([id])
-            }
-          />
-          <DoorsWindowsLayer
-            doors={plan.doors ?? []}
-            windows={plan.windows ?? []}
-            walls={plan.walls}
-            pixelsPerInch={pixelsPerInch}
-            selectedIds={selectionIds}
-            onSelect={(id, additive) =>
-              additive ? addToSelection(id) : setSelection([id])
-            }
-            toolIsSelect={tool === "select"}
-            onUpdateDoor={updateDoor}
-            onUpdateWindow={updateWindow}
-          />
-          <ItemsLayer
-            plan={plan}
-            pixelsPerInch={pixelsPerInch}
-            selectionIds={selectionIds}
-            onSelect={(id, additive) =>
-              additive ? addToSelection(id) : setSelection([id])
-            }
-          />
+          {visibility.zones && (
+            <>
+              <ZonesLayer
+                zones={plan.zones}
+                nonUsable={plan.nonUsable}
+                pixelsPerInch={pixelsPerInch}
+                selectedIds={selectionIds}
+                onSelect={(id, additive) =>
+                  additive ? addToSelection(id) : setSelection([id])
+                }
+                toolIsSelect={tool === "select"}
+                gridSize={plan.gridSize}
+                snapEnabled={plan.snapEnabled}
+                zoneEditMode={zoneEditMode}
+                hideLabels
+                onSnapGuides={setSnapGuides}
+              />
+              <NonUsableLayer
+                regions={plan.nonUsable}
+                zones={plan.zones}
+                pixelsPerInch={pixelsPerInch}
+                selectedIds={selectionIds}
+                onSelect={(id, additive) =>
+                  additive ? addToSelection(id) : setSelection([id])
+                }
+                toolIsSelect={tool === "select"}
+                gridSize={plan.gridSize}
+                snapEnabled={plan.snapEnabled}
+                nonUsableEditMode={nonUsableEditMode}
+                hideLabels
+                onSnapGuides={setSnapGuides}
+              />
+            </>
+          )}
+          {visibility.store && (
+            <>
+              <WallsLayer
+                walls={plan.walls}
+                pixelsPerInch={pixelsPerInch}
+                selectedIds={selectionIds}
+                onSelect={(id, additive) =>
+                  additive ? addToSelection(id) : setSelection([id])
+                }
+              />
+              <DoorsWindowsLayer
+                doors={plan.doors ?? []}
+                windows={plan.windows ?? []}
+                walls={plan.walls}
+                pixelsPerInch={pixelsPerInch}
+                selectedIds={selectionIds}
+                onSelect={(id, additive) =>
+                  additive ? addToSelection(id) : setSelection([id])
+                }
+                toolIsSelect={tool === "select"}
+                onUpdateDoor={updateDoor}
+                onUpdateWindow={updateWindow}
+              />
+            </>
+          )}
+          {visibility.furniture && (
+            <ItemsLayer
+              plan={plan}
+              pixelsPerInch={pixelsPerInch}
+              selectionIds={selectionIds}
+              onSelect={(id, additive) =>
+                additive ? addToSelection(id) : setSelection([id])
+              }
+            />
+          )}
           {/* Labels always on top of all shapes and placed items */}
           <LabelsOverlay
-            zones={plan.zones}
-            nonUsable={plan.nonUsable}
+            zones={visibility.zones ? plan.zones : []}
+            nonUsable={visibility.zones ? plan.nonUsable : []}
             pixelsPerInch={pixelsPerInch}
             showLabels={plan.showLabels}
           />

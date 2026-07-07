@@ -19,13 +19,20 @@ function loadCatalogCache(): Map<string, CatalogItem> {
 
 const catalogCache = loadCatalogCache();
 
-export function addToCatalogCache(items: CatalogItem[]): void {
+export function addToCatalogCache(items: CatalogItem[], persist = true): void {
   for (const item of items) catalogCache.set(item.id, item);
+  if (!persist) return;
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(Array.from(catalogCache.values())));
   } catch {
     // localStorage quota exceeded — keep in memory only
   }
+}
+
+// A trimmed CatalogItem safe to embed on each placed item: drops the large
+// allImages array (JSON.stringify omits the undefined key) so plans stay small.
+export function slimCatalogItem(item: CatalogItem): CatalogItem {
+  return { ...item, allImages: undefined };
 }
 
 // Group any CatalogItem array by category → subcategory (same shape as groupedCatalog).

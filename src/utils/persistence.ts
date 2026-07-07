@@ -33,7 +33,14 @@ export function loadPlans(): FloorPlan[] {
 }
 
 export function savePlans(plans: FloorPlan[]): void {
-  localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
+  try {
+    localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
+  } catch (e) {
+    // Quota exceeded (e.g. a legacy ref image still occupying localStorage until it
+    // migrates to IndexedDB). Never crash the app — keep plans in memory. Once the ref
+    // image migrates out of localStorage, a later save persists them.
+    console.warn("[persistence] savePlans failed (storage quota); plans kept in memory only.", e);
+  }
 }
 
 export function loadActivePlanId(): string | null {
@@ -91,5 +98,15 @@ export function saveRefImages(images: Record<string, unknown>): void {
     localStorage.setItem(REF_IMAGES_KEY, JSON.stringify(images));
   } catch {
     // Quota exceeded (large image data URLs) — skip silently
+  }
+}
+
+// Ref images now live in IndexedDB (see refImageStorage.ts). This removes the old
+// localStorage copy after migration to reclaim the quota it was consuming.
+export function clearLegacyRefImages(): void {
+  try {
+    localStorage.removeItem(REF_IMAGES_KEY);
+  } catch {
+    /* ignore */
   }
 }

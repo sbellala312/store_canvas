@@ -25,11 +25,12 @@ export function PlacedItemNode({
   onSelect,
 }: Props) {
   const updatePlacedItem = usePlanStore((s) => s.updatePlacedItem);
+  const outlineOnly = usePlanStore((s) => s.furnitureOutline);
 
   const w = catalog.width * pixelsPerInch;
   const h = catalog.depth * pixelsPerInch;
   const rawColor = item.color ?? catalog.defaultColor;
-  const color = rawColor === "none" ? "transparent" : rawColor;
+  const color = rawColor === "none" || outlineOnly ? "transparent" : rawColor;
   const isAccessory = catalog.isAccessory;
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {

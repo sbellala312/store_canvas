@@ -112,6 +112,7 @@ function tier(catalogId: string): number {
 
 export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Props) {
   const updatePlacedItem = usePlanStore((s) => s.updatePlacedItem);
+  const outlineOnly = usePlanStore((s) => s.furnitureOutline);
 
   // z-order: rugs first (below), then furniture, then accessories on top.
   // None of these are parented; each item is independently selectable and movable.
@@ -139,7 +140,7 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
 
       {/* Ghost overlay: faintly reveal the hidden portion of back items under front items */}
       <Group listening={false}>
-        {sorted.flatMap((frontItem, fi) => {
+        {!outlineOnly && sorted.flatMap((frontItem, fi) => {
           const frontCat = getCatalogItem(frontItem.catalogId);
           if (!frontCat) return [];
           const fx = frontItem.x * pixelsPerInch;

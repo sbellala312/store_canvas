@@ -3,6 +3,7 @@ import { v4 as uuid } from "uuid";
 import type {
   FloorPlan,
   PlacedItem,
+  CatalogItem,
   Zone,
   ZoneRect,
   ZonePolygon,
@@ -27,7 +28,8 @@ import {
   loadScaleRatio,
   saveScaleRatio,
 } from "../utils/persistence";
-import { CATALOG_BY_ID } from "../data/catalog";
+import { CATALOG_BY_ID, getCatalogItem, addToCatalogCache, slimCatalogItem } from "../data/catalog";
+import { findCatalogItemBySku } from "../services/azureSearch";
 import { clampRectToFloor, clampPointToFloor, floorBBox } from "../utils/geometry";
 
 const MAX_HISTORY = 50;
@@ -51,8 +53,18 @@ interface State {
   zoom: number;
   pan: { x: number; y: number };
   showRuler: boolean;
+  // Layer visibility toggles (view-only; not persisted per plan).
+  visibility: LayerVisibility;
+  // Render furniture as outlines + labels only (no fill).
+  furnitureOutline: boolean;
 
   history: Record<string, History>;
+}
+
+export interface LayerVisibility {
+  store: boolean;     // floor + walls + doors/windows
+  zones: boolean;     // zones + non-usable regions (and their labels)
+  furniture: boolean; // placed items (and their labels/callouts)
 }
 
 interface Actions {
@@ -99,7 +111,13 @@ interface Actions {
   toggleGrid: () => void;
   toggleSnap: () => void;
   toggleLabels: () => void;
+  toggleVisibility: (key: keyof LayerVisibility) => void;
+  toggleFurnitureOutline: () => void;
   setGridSize: (size: number) => void;
+
+  // Re-fetch catalog specs (from Azure) for any placed items whose spec is missing
+  // and unresolvable locally, then embed them so they persist. Heals older plans.
+  recoverPlacedItemSpecs: () => Promise<void>;
 
   // Kits
   saveKit: (name: string, ids: string[]) => void;
@@ -134,7 +152,33 @@ interface Actions {
   canRedo: () => boolean;
 }
 
+// Make every placed item self-contained: seed the in-memory catalog cache from each
+// item's embedded spec, and backfill specs for older placements from whatever cache
+// still resolves. This is why items no longer vanish on refresh when the separately
+// persisted catalog cache gets evicted (e.g. localStorage quota).
+function hydratePlacedItemSpecs(plans: FloorPlan[]): boolean {
+  const specs: CatalogItem[] = [];
+  let mutated = false;
+  for (const plan of plans) {
+    for (const item of plan.placedItems ?? []) {
+      if (item.spec) {
+        specs.push(item.spec);
+      } else {
+        const cat = getCatalogItem(item.catalogId);
+        if (cat) {
+          item.spec = slimCatalogItem(cat);
+          specs.push(item.spec);
+          mutated = true;
+        }
+      }
+    }
+  }
+  if (specs.length) addToCatalogCache(specs, false);
+  return mutated;
+}
+
 const initialPlans = loadPlans();
+if (hydratePlacedItemSpecs(initialPlans)) savePlans(initialPlans);
 const initialActive = loadActivePlanId();
 const initialActiveValid =
   initialActive && initialPlans.some((p) => p.id === initialActive)
@@ -186,6 +230,8 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   zoom: 1,
   pan: { x: 0, y: 0 },
   showRuler: false,
+  visibility: { store: true, zones: true, furniture: true },
+  furnitureOutline: false,
 
   history: {},
 
@@ -313,8 +359,11 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
 
   addPlacedItem: (item) => {
     const id = uuid();
+    // Embed the render spec so the item survives catalog-cache eviction on reload.
+    const cat = item.spec ? undefined : getCatalogItem(item.catalogId);
+    const spec = item.spec ?? (cat ? slimCatalogItem(cat) : undefined);
     get().updateActive((p) => {
-      p.placedItems.push({ ...item, id });
+      p.placedItems.push({ ...item, id, spec });
     });
     return id;
   },
@@ -605,6 +654,7 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
     const newIds: string[] = kit.items.map(() => uuid());
     get().updateActive((p) => {
       kit.items.forEach((item, i) => {
+        const cat = getCatalogItem(item.catalogId);
         const placed: PlacedItem = {
           id: newIds[i],
           catalogId: item.catalogId,
@@ -614,6 +664,7 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
           color: item.color,
           parentId:
             item.parentIndex !== undefined ? newIds[item.parentIndex] : undefined,
+          spec: cat ? slimCatalogItem(cat) : undefined,
         };
         p.placedItems.push(placed);
       });
@@ -643,6 +694,46 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   setZoom: (z) => set({ zoom: Math.max(0.1, Math.min(5, z)) }),
   setPan: (p) => set({ pan: p }),
   toggleRuler: () => set((s) => ({ showRuler: !s.showRuler })),
+
+  toggleVisibility: (key) =>
+    set((s) => ({ visibility: { ...s.visibility, [key]: !s.visibility[key] } })),
+
+  toggleFurnitureOutline: () => set((s) => ({ furnitureOutline: !s.furnitureOutline })),
+
+  recoverPlacedItemSpecs: async () => {
+    // Collect placed items that have no embedded spec and don't resolve locally.
+    const unresolved = new Set<string>();
+    for (const plan of get().plans) {
+      for (const item of plan.placedItems ?? []) {
+        if (!item.spec && !getCatalogItem(item.catalogId)) unresolved.add(item.catalogId);
+      }
+    }
+    if (unresolved.size === 0) return;
+
+    // Fetch each missing spec from Azure (populates the in-memory catalog cache).
+    await Promise.all(
+      [...unresolved].map((sku) => findCatalogItemBySku(sku).catch(() => null))
+    );
+
+    // Backfill specs into the plans for anything that now resolves, then persist.
+    let changed = false;
+    const plans = get().plans.map((plan) => {
+      let planChanged = false;
+      const placedItems = (plan.placedItems ?? []).map((item) => {
+        if (item.spec) return item;
+        const cat = getCatalogItem(item.catalogId);
+        if (!cat) return item;
+        planChanged = true;
+        changed = true;
+        return { ...item, spec: slimCatalogItem(cat) };
+      });
+      return planChanged ? { ...plan, placedItems } : plan;
+    });
+    if (changed) {
+      savePlans(plans);
+      set({ plans });
+    }
+  },
 
   undo: () => {
     set((s) => {
