@@ -106,10 +106,16 @@ export function CanvasStage({ width, height }: Props) {
   const [refHtmlImage, setRefHtmlImage] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    if (!refImage?.dataUrl) { setRefHtmlImage(null); return; }
+    // Clear first so the previous plan's image never shows while the new one loads.
+    setRefHtmlImage(null);
+    if (!refImage?.dataUrl) return;
+    // Cancel stale loads: without this, switching plans lets an earlier plan's
+    // (or the last-loaded) image win the race and stick on the wrong plan.
+    let cancelled = false;
     const img = new window.Image();
+    img.onload = () => { if (!cancelled) setRefHtmlImage(img); };
     img.src = refImage.dataUrl;
-    img.onload = () => setRefHtmlImage(img);
+    return () => { cancelled = true; };
   }, [refImage?.dataUrl]);
 
   useEffect(() => {
@@ -443,11 +449,15 @@ export function CanvasStage({ width, height }: Props) {
         x: Math.max(0, Math.min(wp.x, fw)),
         y: Math.max(0, Math.min(wp.y, fh)),
       };
-      const snapped = snapPoint(clamped, plan.gridSize, plan.snapEnabled);
+      const snappedRaw = snapPoint(clamped, plan.gridSize, plan.snapEnabled);
       if (!draftPolygon || draftPolygon.length === 0) {
-        setDraftPolygon([snapped]);
+        setDraftPolygon([snappedRaw]);
         return;
       }
+      // Hold Shift to constrain this edge to 0°/45°/90° from the previous vertex.
+      const snapped = shiftDown.current
+        ? constrainToAngle(draftPolygon[draftPolygon.length - 1], snappedRaw)
+        : snappedRaw;
       // Close polygon if click is near the first vertex (within 12 inches)
       const first = draftPolygon[0];
       const dxClose = snapped.x - first.x;
@@ -917,12 +927,17 @@ export function CanvasStage({ width, height }: Props) {
                   p.x * pixelsPerInch,
                   p.y * pixelsPerInch,
                 ]);
-                const cursor = hoverWorld;
+                const last = draftPolygon[draftPolygon.length - 1];
+                // Hold Shift to preview the edge constrained to 0°/45°/90°.
+                const cursor =
+                  hoverWorld && shiftDown.current
+                    ? constrainToAngle(last, hoverWorld)
+                    : hoverWorld;
                 const rubber =
                   cursor && draftPolygon.length > 0
                     ? [
-                        draftPolygon[draftPolygon.length - 1].x * pixelsPerInch,
-                        draftPolygon[draftPolygon.length - 1].y * pixelsPerInch,
+                        last.x * pixelsPerInch,
+                        last.y * pixelsPerInch,
                         cursor.x * pixelsPerInch,
                         cursor.y * pixelsPerInch,
                       ]
@@ -1235,9 +1250,9 @@ export function CanvasStage({ width, height }: Props) {
         >
           {tool === "pan" && "Drag anywhere to pan the canvas — V to switch back to Select"}
           {tool === "zone" && "Click-drag to draw a rectangular department zone"}
-          {tool === "zonePolygon" && "Click vertices to draw a polygon zone — click first point or double-click to close · Enter commits · Esc cancels"}
+          {tool === "zonePolygon" && "Click vertices to draw a polygon zone — click first point or double-click to close · Hold Shift for straight edges (0°/45°/90°) · Enter commits · Esc cancels"}
           {tool === "nonUsable" && "Click-drag to mark non-usable area"}
-          {tool === "nonUsablePolygon" && "Click vertices to draw a free-form non-usable area — click first point or double-click to close · Enter commits · Esc cancels"}
+          {tool === "nonUsablePolygon" && "Click vertices to draw a free-form non-usable area — click first point or double-click to close · Hold Shift for straight edges (0°/45°/90°) · Enter commits · Esc cancels"}
           {tool === "wall" && "Click two points to draw a wall · Hold Shift for straight walls (0°/45°/90°) · Hold Alt to bypass snap"}
           {tool === "door" && "Click on a wall to place a door (36\" default width)"}
           {tool === "window" && "Click on a wall to place a window (36\" default width)"}

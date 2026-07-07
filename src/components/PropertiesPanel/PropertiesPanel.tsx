@@ -59,6 +59,8 @@ export function PropertiesPanel() {
           <div>M — Measure tool</div>
           <div>G — Toggle grid</div>
           <div>S — Toggle snap</div>
+          <div>Shift (while drawing) — Straight wall / zone edges (0°/45°/90°)</div>
+          <div>Alt (while drawing) — Bypass snap</div>
           <div>R / Shift+R — Rotate ±90°</div>
           <div>Ctrl+D — Duplicate</div>
           <div>[ / ] — Send backward / Bring forward</div>
