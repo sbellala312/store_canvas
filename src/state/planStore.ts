@@ -31,6 +31,7 @@ import {
 import { CATALOG_BY_ID, getCatalogItem, addToCatalogCache, slimCatalogItem } from "../data/catalog";
 import { findCatalogItemBySku } from "../services/azureSearch";
 import { clampRectToFloor, clampPointToFloor, floorBBox } from "../utils/geometry";
+import { DEFAULT_LABEL_FONT } from "../utils/labelFont";
 
 const MAX_HISTORY = 50;
 
@@ -57,6 +58,9 @@ interface State {
   visibility: LayerVisibility;
   // Render furniture as outlines + labels only (no fill).
   furnitureOutline: boolean;
+  // Label styling (view-only): font family key (see labelFont.ts) and uppercase toggle.
+  labelFont: string;
+  labelUppercase: boolean;
 
   history: Record<string, History>;
 }
@@ -113,6 +117,8 @@ interface Actions {
   toggleLabels: () => void;
   toggleVisibility: (key: keyof LayerVisibility) => void;
   toggleFurnitureOutline: () => void;
+  setLabelFont: (key: string) => void;
+  toggleLabelUppercase: () => void;
   setGridSize: (size: number) => void;
 
   // Re-fetch catalog specs (from Azure) for any placed items whose spec is missing
@@ -232,6 +238,8 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   showRuler: false,
   visibility: { store: true, zones: true, furniture: true },
   furnitureOutline: false,
+  labelFont: DEFAULT_LABEL_FONT,
+  labelUppercase: true,
 
   history: {},
 
@@ -699,6 +707,9 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
     set((s) => ({ visibility: { ...s.visibility, [key]: !s.visibility[key] } })),
 
   toggleFurnitureOutline: () => set((s) => ({ furnitureOutline: !s.furnitureOutline })),
+
+  setLabelFont: (key) => set({ labelFont: key }),
+  toggleLabelUppercase: () => set((s) => ({ labelUppercase: !s.labelUppercase })),
 
   recoverPlacedItemSpecs: async () => {
     // Collect placed items that have no embedded spec and don't resolve locally.

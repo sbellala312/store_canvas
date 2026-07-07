@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Group, Line, Rect, Text } from "react-konva";
 import type Konva from "konva";
 import type { Zone } from "../../types/model";
@@ -31,7 +32,7 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-export function ZonesLayer({
+export const ZonesLayer = memo(function ZonesLayer({
   zones,
   nonUsable,
   pixelsPerInch,
@@ -307,7 +308,7 @@ export function ZonesLayer({
       })}
     </Group>
   );
-}
+});
 
 function ZoneLabel({
   name,

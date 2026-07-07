@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Group, Line, Rect, Circle } from "react-konva";
 import type Konva from "konva";
 import type { Door, Window, Wall } from "../../types/model";
@@ -14,7 +15,7 @@ interface Props {
   onUpdateWindow: (id: string, patch: Partial<Omit<Window, "id">>) => void;
 }
 
-export function DoorsWindowsLayer({
+export const DoorsWindowsLayer = memo(function DoorsWindowsLayer({
   doors,
   windows,
   walls,
@@ -54,7 +55,7 @@ export function DoorsWindowsLayer({
       ))}
     </Group>
   );
-}
+});
 
 // ─── Geometry helpers ────────────────────────────────────────────────────────
 

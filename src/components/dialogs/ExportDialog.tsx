@@ -15,12 +15,14 @@ export function ExportDialog({ onClose }: Props) {
   const refImages = useRefImageStore((s) => s.refImages);
   const refImage = plan ? refImages[plan.id] ?? null : null;
   const furnitureOutline = usePlanStore((s) => s.furnitureOutline);
+  const labelFont = usePlanStore((s) => s.labelFont);
+  const labelUppercase = usePlanStore((s) => s.labelUppercase);
 
   const doExport = (format: "png" | "pdf" | "vector") => {
     if (!plan) return;
     if (format === "vector") {
       // Vector PDF — sharp at any zoom, drawn from plan data (no stage needed).
-      exportVectorPDF(plan, refImage, furnitureOutline);
+      exportVectorPDF(plan, refImage, furnitureOutline, labelFont, labelUppercase);
     } else {
       // Raster PNG / PDF — rendered off-screen at the best resolution the browser allows.
       const stage = getStage();

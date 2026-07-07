@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Group, Line } from "react-konva";
 import type { Wall } from "../../types/model";
 
@@ -8,7 +9,7 @@ interface Props {
   onSelect: (id: string, additive: boolean) => void;
 }
 
-export function WallsLayer({ walls, pixelsPerInch, selectedIds, onSelect }: Props) {
+export const WallsLayer = memo(function WallsLayer({ walls, pixelsPerInch, selectedIds, onSelect }: Props) {
   return (
     <Group>
       {walls.map((w) => {
@@ -38,4 +39,4 @@ export function WallsLayer({ walls, pixelsPerInch, selectedIds, onSelect }: Prop
       })}
     </Group>
   );
-}
+});

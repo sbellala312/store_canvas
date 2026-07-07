@@ -4,6 +4,7 @@ import type { RefImage } from "../state/refImageStore";
 import { getCatalogItem } from "../data/catalog";
 import { floorBBox, polygonBBox, polygonCentroid, polygonArea } from "../utils/geometry";
 import { feetInches, sqftFromInches, formatSqft } from "../utils/units";
+import { fontPdf } from "../utils/labelFont";
 import { planContentBounds } from "./export";
 
 // Vector PDF export: draws the whole plan as PDF vector shapes + text (not a flattened
@@ -33,7 +34,11 @@ export function exportVectorPDF(
   plan: FloorPlan,
   refImage: RefImage | null,
   outlineOnly = false,
+  labelFontKey = "sans",
+  labelUppercase = true,
 ): void {
+  const labelFontName = fontPdf(labelFontKey);
+  const applyCase = (t: string) => (labelUppercase ? t.toUpperCase() : t);
   const b = planContentBounds(plan);
   const S = TARGET_PT / Math.max(1, b.w, b.h); // points per inch
   const contentW = b.w * S;
@@ -64,7 +69,7 @@ export function exportVectorPDF(
 
   // Draw N centered text lines around a point, sized in points.
   const centeredText = (lines: string[], cxPt: number, cyPt: number, fontPt: number, bold: boolean) => {
-    pdf.setFont("helvetica", bold ? "bold" : "normal");
+    pdf.setFont(labelFontName, bold ? "bold" : "normal");
     pdf.setFontSize(fontPt);
     const lh = fontPt * 1.15;
     let ty = cyPt - (lines.length * lh) / 2 + fontPt * 0.85;
@@ -196,9 +201,9 @@ export function exportVectorPDF(
     if (!noFill) pdf.setTextColor(...hexToRgb(z.color));
     else pdf.setTextColor(120, 130, 140);
     setOpacity(pdf, 0.75);
-    centeredText([z.name.toUpperCase()], X(c.x), Y(c.y), nameFont, true);
+    centeredText([applyCase(z.name)], X(c.x), Y(c.y), nameFont, true);
     const sqft = z.kind === "rect" ? sqftFromInches(z.width, z.height) : polygonArea(z.points) / 144;
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(labelFontName, "normal");
     pdf.setFontSize(Math.max(5, nameFont * 0.5));
     pdf.text(formatSqft(sqft), X(bb.x + bb.width) - 3, Y(bb.y + bb.height) - 3, { align: "right" });
     setOpacity(pdf, 1);
@@ -218,12 +223,12 @@ export function exportVectorPDF(
     const d = cat.depth;
     const cx = item.x + w / 2;
     const cy = item.y + d / 2;
-    const rawLines = cat.seriesName ? [cat.seriesName, cat.name] : [cat.name];
+    const rawLines = (cat.seriesName ? [cat.seriesName, cat.name] : [cat.name]).map(applyCase);
 
     // Font sized to the item (in inches) so it reads like the canvas and scales with zoom.
     const fontIn = Math.min(8, Math.max(2, Math.min(w, d) * 0.14));
     const fontPt = fontIn * S;
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(labelFontName, "normal");
     pdf.setFontSize(fontPt);
     pdf.setTextColor(26, 31, 38);
 
@@ -299,9 +304,9 @@ export function exportVectorPDF(
     const nameFont = Math.max(6, L(minDim) * 0.16);
     pdf.setTextColor(58, 70, 84);
     setOpacity(pdf, 0.75);
-    centeredText([(r.label ?? "Non-usable").toUpperCase()], X(c.x), Y(c.y), nameFont, true);
+    centeredText([applyCase(r.label ?? "Non-usable")], X(c.x), Y(c.y), nameFont, true);
     const sqft = r.kind === "rect" ? sqftFromInches(r.width, r.height) : polygonArea(r.points) / 144;
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(labelFontName, "normal");
     pdf.setFontSize(Math.max(5, nameFont * 0.5));
     pdf.text(formatSqft(sqft), X(bb.x + bb.width) - 3, Y(bb.y + bb.height) - 3, { align: "right" });
     setOpacity(pdf, 1);

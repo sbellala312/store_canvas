@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Group, Line, Rect } from "react-konva";
 import type { FloorShape } from "../../types/model";
 
@@ -6,7 +7,7 @@ interface Props {
   pixelsPerInch: number;
 }
 
-export function FloorLayer({ floor, pixelsPerInch }: Props) {
+export const FloorLayer = memo(function FloorLayer({ floor, pixelsPerInch }: Props) {
   if (floor.kind === "rect") {
     return (
       <Rect
@@ -27,4 +28,4 @@ export function FloorLayer({ floor, pixelsPerInch }: Props) {
       <Line points={pts} closed fill="#fafbfc" stroke="#2d3742" strokeWidth={2} />
     </Group>
   );
-}
+});

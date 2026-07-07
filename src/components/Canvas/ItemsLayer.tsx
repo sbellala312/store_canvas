@@ -1,10 +1,11 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { Group, Text, Rect, Circle, Line } from "react-konva";
 import type Konva from "konva";
 import type { FloorPlan, PlacedItem } from "../../types/model";
 import { getCatalogItem } from "../../data/catalog";
 import { PlacedItemNode } from "./PlacedItemNode";
 import { usePlanStore } from "../../state/planStore";
+import { fontCss } from "../../utils/labelFont";
 
 interface Props {
   plan: FloorPlan;
@@ -17,6 +18,7 @@ interface Props {
 interface CalloutProps {
   itemId: string;
   labelText: string;
+  fontFamily: string;
   calloutFontSize: number;
   boxW: number;
   boxH: number;
@@ -31,7 +33,7 @@ interface CalloutProps {
 }
 
 function CalloutLabel({
-  itemId, labelText, calloutFontSize, boxW, boxH,
+  itemId, labelText, fontFamily, calloutFontSize, boxW, boxH,
   itemCx, itemCy, boxX, boxY, defaultBoxX, defaultBoxY,
   opacity, onUpdate,
 }: CalloutProps) {
@@ -89,6 +91,7 @@ function CalloutLabel({
           y={4}
           text={labelText}
           fontSize={calloutFontSize}
+          fontFamily={fontFamily}
           lineHeight={1.4}
           align="center"
           fill="#1a1f26"
@@ -101,6 +104,10 @@ function CalloutLabel({
   );
 }
 
+// The ghost overlay is O(n²) in placed items; skip it on very dense plans so edits
+// don't hitch. Items still render normally — only the faint occlusion hint is dropped.
+const GHOST_LIMIT = 60;
+
 function tier(catalogId: string): number {
   const c = getCatalogItem(catalogId);
   if (!c) return 1;
@@ -110,9 +117,13 @@ function tier(catalogId: string): number {
   return 1;
 }
 
-export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Props) {
+export const ItemsLayer = memo(function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Props) {
   const updatePlacedItem = usePlanStore((s) => s.updatePlacedItem);
   const outlineOnly = usePlanStore((s) => s.furnitureOutline);
+  const labelFont = usePlanStore((s) => s.labelFont);
+  const labelUppercase = usePlanStore((s) => s.labelUppercase);
+  const labelFamily = fontCss(labelFont);
+  const applyCase = (t: string) => (labelUppercase ? t.toUpperCase() : t);
 
   // z-order: rugs first (below), then furniture, then accessories on top.
   // None of these are parented; each item is independently selectable and movable.
@@ -140,7 +151,7 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
 
       {/* Ghost overlay: faintly reveal the hidden portion of back items under front items */}
       <Group listening={false}>
-        {!outlineOnly && sorted.flatMap((frontItem, fi) => {
+        {!outlineOnly && sorted.length <= GHOST_LIMIT && sorted.flatMap((frontItem, fi) => {
           const frontCat = getCatalogItem(frontItem.catalogId);
           if (!frontCat) return [];
           const fx = frontItem.x * pixelsPerInch;
@@ -245,9 +256,9 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
             const lineH = fontSize * 1.4;
             const labelW = Math.max(0, w - 8);
 
-            const labelText = cat.seriesName
-              ? `${cat.seriesName}\n${cat.name}`
-              : cat.name;
+            const labelText = applyCase(
+              cat.seriesName ? `${cat.seriesName}\n${cat.name}` : cat.name
+            );
 
             const effectiveFontSize = item.labelFontSize ?? fontSize;
             const effectiveLineH = effectiveFontSize * 1.4;
@@ -312,6 +323,7 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
                       y={-textH / 2}
                       text={labelText}
                       fontSize={effectiveFontSize}
+                      fontFamily={labelFamily}
                       lineHeight={1.4}
                       align="center"
                       fill="#1a1f26"
@@ -327,6 +339,7 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
                     y={textY}
                     text={labelText}
                     fontSize={effectiveFontSize}
+                    fontFamily={labelFamily}
                     lineHeight={1.4}
                     align={align}
                     fill="#1a1f26"
@@ -356,9 +369,9 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
 
             const calloutFontSize = item.labelFontSize ?? Math.max(8, Math.min(10, maxDim * 0.08));
             const calloutLineH = calloutFontSize * 1.4;
-            const labelText = cat.seriesName
-              ? `${cat.seriesName}\n${cat.name}`
-              : cat.name;
+            const labelText = applyCase(
+              cat.seriesName ? `${cat.seriesName}\n${cat.name}` : cat.name
+            );
             const numLines = labelText.includes("\n") ? 2 : 1;
             const boxH = calloutLineH * numLines + 8;
             const boxW = 66;
@@ -380,6 +393,7 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
                 key={`callout-${item.id}`}
                 itemId={item.id}
                 labelText={labelText}
+                fontFamily={labelFamily}
                 calloutFontSize={calloutFontSize}
                 boxW={boxW}
                 boxH={boxH}
@@ -398,4 +412,4 @@ export function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Prop
       )}
     </Group>
   );
-}
+});

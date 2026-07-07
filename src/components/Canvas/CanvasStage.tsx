@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Stage, Layer, Rect, Line, Text, Group, Circle, Transformer, Image as KonvaImage } from "react-konva";
 import type Konva from "konva";
 import type { Point } from "../../types/model";
@@ -63,6 +63,11 @@ export function CanvasStage({ width, height }: Props) {
   const setSelection = usePlanStore((s) => s.setSelection);
   const addToSelection = usePlanStore((s) => s.addToSelection);
   const clearSelection = usePlanStore((s) => s.clearSelection);
+  // Stable handler so memoized layers don't re-render on every parent render (e.g. hover/pan).
+  const handleSelect = useCallback(
+    (id: string, additive: boolean) => (additive ? addToSelection(id) : setSelection([id])),
+    [addToSelection, setSelection],
+  );
   const setZoom = usePlanStore((s) => s.setZoom);
   const setPan = usePlanStore((s) => s.setPan);
   const addPlacedItem = usePlanStore((s) => s.addPlacedItem);
@@ -717,9 +722,7 @@ export function CanvasStage({ width, height }: Props) {
                 nonUsable={plan.nonUsable}
                 pixelsPerInch={pixelsPerInch}
                 selectedIds={selectionIds}
-                onSelect={(id, additive) =>
-                  additive ? addToSelection(id) : setSelection([id])
-                }
+                onSelect={handleSelect}
                 toolIsSelect={tool === "select"}
                 gridSize={plan.gridSize}
                 snapEnabled={plan.snapEnabled}
@@ -732,9 +735,7 @@ export function CanvasStage({ width, height }: Props) {
                 zones={plan.zones}
                 pixelsPerInch={pixelsPerInch}
                 selectedIds={selectionIds}
-                onSelect={(id, additive) =>
-                  additive ? addToSelection(id) : setSelection([id])
-                }
+                onSelect={handleSelect}
                 toolIsSelect={tool === "select"}
                 gridSize={plan.gridSize}
                 snapEnabled={plan.snapEnabled}
@@ -750,9 +751,7 @@ export function CanvasStage({ width, height }: Props) {
                 walls={plan.walls}
                 pixelsPerInch={pixelsPerInch}
                 selectedIds={selectionIds}
-                onSelect={(id, additive) =>
-                  additive ? addToSelection(id) : setSelection([id])
-                }
+                onSelect={handleSelect}
               />
               <DoorsWindowsLayer
                 doors={plan.doors ?? []}
@@ -760,9 +759,7 @@ export function CanvasStage({ width, height }: Props) {
                 walls={plan.walls}
                 pixelsPerInch={pixelsPerInch}
                 selectedIds={selectionIds}
-                onSelect={(id, additive) =>
-                  additive ? addToSelection(id) : setSelection([id])
-                }
+                onSelect={handleSelect}
                 toolIsSelect={tool === "select"}
                 onUpdateDoor={updateDoor}
                 onUpdateWindow={updateWindow}
@@ -774,9 +771,7 @@ export function CanvasStage({ width, height }: Props) {
               plan={plan}
               pixelsPerInch={pixelsPerInch}
               selectionIds={selectionIds}
-              onSelect={(id, additive) =>
-                additive ? addToSelection(id) : setSelection([id])
-              }
+              onSelect={handleSelect}
             />
           )}
           {/* Labels always on top of all shapes and placed items */}

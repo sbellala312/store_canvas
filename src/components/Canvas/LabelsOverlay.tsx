@@ -1,7 +1,10 @@
+import { memo } from "react";
 import { Group, Text } from "react-konva";
 import type { Zone, NonUsableRegion } from "../../types/model";
 import { polygonBBox, polygonCentroid, polygonArea } from "../../utils/geometry";
 import { sqftFromInches, formatSqft } from "../../utils/units";
+import { usePlanStore } from "../../state/planStore";
+import { fontCss } from "../../utils/labelFont";
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace("#", "");
@@ -18,7 +21,11 @@ interface Props {
   showLabels: boolean;
 }
 
-export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: Props) {
+export const LabelsOverlay = memo(function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: Props) {
+  const labelFont = usePlanStore((s) => s.labelFont);
+  const labelUppercase = usePlanStore((s) => s.labelUppercase);
+  const family = fontCss(labelFont);
+  const applyCase = (t: string) => (labelUppercase ? t.toUpperCase() : t);
   if (!showLabels) return null;
   const ppi = pixelsPerInch;
 
@@ -40,8 +47,9 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
                 y={h / 2 - fontSize * 0.7}
                 width={labelW}
                 align="center"
-                text={z.name.toUpperCase()}
+                text={applyCase(z.name)}
                 fontSize={fontSize}
+                fontFamily={family}
                 fontStyle="bold"
                 letterSpacing={1.5}
                 fill={hexToRgba(z.color, 0.7)}
@@ -50,6 +58,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
               <Text
                 text={formatSqft(sqftFromInches(z.width, z.height))}
                 fontSize={sqftFontSize}
+                fontFamily={family}
                 fill={hexToRgba(z.color, 0.6)}
                 x={w - 4}
                 y={h - sqftFontSize - 2}
@@ -79,8 +88,9 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
                 y={cy - fontSize * 0.7}
                 width={labelW}
                 align="center"
-                text={z.name.toUpperCase()}
+                text={applyCase(z.name)}
                 fontSize={fontSize}
+                fontFamily={family}
                 fontStyle="bold"
                 letterSpacing={1.5}
                 fill={hexToRgba(z.color, 0.7)}
@@ -89,6 +99,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
               <Text
                 text={formatSqft(polySqft)}
                 fontSize={sqftFontSize}
+                fontFamily={family}
                 fill={hexToRgba(z.color, 0.6)}
                 x={(bbox.x + bbox.width) * ppi - 4}
                 y={(bbox.y + bbox.height) * ppi - sqftFontSize - 2}
@@ -111,7 +122,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
           const fontSize = Math.max(14, Math.min(32, minDim * 0.18));
           const labelW = Math.max(16, w - 12);
           const sqftFontSize = Math.max(12, Math.min(20, minDim * 0.12));
-          const labelText = (r.label ?? "Non-usable").toUpperCase();
+          const labelText = applyCase(r.label ?? "Non-usable");
           return (
             <Group key={`nulbl-${r.id}`} x={r.x * ppi} y={r.y * ppi} listening={false}>
               <Text
@@ -121,6 +132,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
                 align="center"
                 text={labelText}
                 fontSize={fontSize}
+                fontFamily={family}
                 fontStyle="bold"
                 letterSpacing={1.5}
                 fill="rgba(58,70,84,0.75)"
@@ -129,6 +141,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
               <Text
                 text={formatSqft(sqftFromInches(r.width, r.height))}
                 fontSize={sqftFontSize}
+                fontFamily={family}
                 fill="rgba(58,70,84,0.7)"
                 x={w - 4}
                 y={h - sqftFontSize - 2}
@@ -151,7 +164,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
           const labelW = Math.max(20, bboxPxW - 16);
           const sqftFontSize = Math.max(12, Math.min(20, minDim * 0.12));
           const sqft = polygonArea(r.points) / 144;
-          const labelText = (r.label ?? "Non-usable").toUpperCase();
+          const labelText = applyCase(r.label ?? "Non-usable");
           return (
             <Group key={`nulbl-${r.id}`} listening={false}>
               <Text
@@ -161,6 +174,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
                 align="center"
                 text={labelText}
                 fontSize={fontSize}
+                fontFamily={family}
                 fontStyle="bold"
                 letterSpacing={1.5}
                 fill="rgba(58,70,84,0.75)"
@@ -169,6 +183,7 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
               <Text
                 text={formatSqft(sqft)}
                 fontSize={sqftFontSize}
+                fontFamily={family}
                 fill="rgba(58,70,84,0.7)"
                 x={(bbox.x + bbox.width) * ppi - 4}
                 y={(bbox.y + bbox.height) * ppi - sqftFontSize - 2}
@@ -183,4 +198,4 @@ export function LabelsOverlay({ zones, nonUsable, pixelsPerInch, showLabels }: P
       })}
     </Group>
   );
-}
+});

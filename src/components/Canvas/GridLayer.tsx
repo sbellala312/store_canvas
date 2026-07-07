@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Group, Line, Rect } from "react-konva";
 import type { FloorShape } from "../../types/model";
 
@@ -8,7 +9,7 @@ interface Props {
   visible: boolean;
 }
 
-export function GridLayer({ floor, gridSize, pixelsPerInch, visible }: Props) {
+export const GridLayer = memo(function GridLayer({ floor, gridSize, pixelsPerInch, visible }: Props) {
   if (!visible) return null;
   const { width, height } =
     floor.kind === "rect" ? floor : floor.bbox;
@@ -53,4 +54,17 @@ export function GridLayer({ floor, gridSize, pixelsPerInch, visible }: Props) {
       {lines}
     </Group>
   );
-}
+}, (a, b) => {
+  // Value-based compare: the floor object gets a fresh reference on every plan edit
+  // (deep clone for undo history), so a shallow prop compare would rebuild all grid
+  // lines on each edit. Only rebuild when the actual dimensions/scale/visibility change.
+  const da = a.floor.kind === "rect" ? a.floor : a.floor.bbox;
+  const db = b.floor.kind === "rect" ? b.floor : b.floor.bbox;
+  return (
+    a.visible === b.visible &&
+    a.gridSize === b.gridSize &&
+    a.pixelsPerInch === b.pixelsPerInch &&
+    da.width === db.width &&
+    da.height === db.height
+  );
+});

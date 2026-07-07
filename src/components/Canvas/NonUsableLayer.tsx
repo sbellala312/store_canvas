@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Group, Line, Rect, Text } from "react-konva";
 import type Konva from "konva";
 import type { NonUsableRegion } from "../../types/model";
@@ -55,7 +56,7 @@ interface Props {
   onSnapGuides?: (guides: SnapGuide[]) => void;
 }
 
-export function NonUsableLayer({
+export const NonUsableLayer = memo(function NonUsableLayer({
   regions,
   zones,
   pixelsPerInch,
@@ -307,7 +308,7 @@ export function NonUsableLayer({
       })}
     </Group>
   );
-}
+});
 
 function NonUsableLabel({ text, bboxWidth, bboxHeight }: { text: string; bboxWidth: number; bboxHeight: number }) {
   const minDim = Math.min(bboxWidth, bboxHeight);

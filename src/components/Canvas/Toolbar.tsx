@@ -3,6 +3,7 @@ import { usePlanStore, findMatchingKit } from "../../state/planStore";
 import { useRefImageStore } from "../../state/refImageStore";
 import type { Tool } from "../../types/model";
 import { downloadJSON, downloadCSV } from "../../utils/exportData";
+import { FONT_OPTIONS } from "../../utils/labelFont";
 
 interface Props {
   onNewPlan: () => void;
@@ -50,6 +51,10 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
   const toggleVisibility = usePlanStore((s) => s.toggleVisibility);
   const furnitureOutline = usePlanStore((s) => s.furnitureOutline);
   const toggleFurnitureOutline = usePlanStore((s) => s.toggleFurnitureOutline);
+  const labelFont = usePlanStore((s) => s.labelFont);
+  const setLabelFont = usePlanStore((s) => s.setLabelFont);
+  const labelUppercase = usePlanStore((s) => s.labelUppercase);
+  const toggleLabelUppercase = usePlanStore((s) => s.toggleLabelUppercase);
 
   const undo = usePlanStore((s) => s.undo);
   const redo = usePlanStore((s) => s.redo);
@@ -254,6 +259,32 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
                   title="Show scale ruler and scale bar"
                 >
                   <input type="checkbox" checked={showRuler} onChange={toggleRuler} /> Ruler
+                </label>
+
+                <div style={{ borderTop: "1px solid #e8edf2", margin: "2px 0" }} />
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Labels</div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={labelUppercase} onChange={toggleLabelUppercase} />
+                  UPPERCASE
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <span>Font</span>
+                  <select
+                    value={labelFont}
+                    onChange={(e) => setLabelFont(e.target.value)}
+                    style={{
+                      padding: "4px 6px",
+                      border: "1px solid #c0cad4",
+                      borderRadius: 4,
+                      fontSize: 12,
+                    }}
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.key} value={f.key} style={{ fontFamily: f.css }}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
             </>
