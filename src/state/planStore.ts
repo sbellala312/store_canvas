@@ -27,6 +27,8 @@ import {
   saveKits,
   loadScaleRatio,
   saveScaleRatio,
+  loadFolders,
+  saveFolders,
 } from "../utils/persistence";
 import { CATALOG_BY_ID, getCatalogItem, addToCatalogCache, slimCatalogItem } from "../data/catalog";
 import { findCatalogItemBySku } from "../services/azureSearch";
@@ -44,6 +46,8 @@ interface State {
   plans: FloorPlan[];
   activePlanId: string | null;
   kits: Kit[];
+  // User-created folders for organizing plans (persisted, may be empty).
+  folders: string[];
 
   tool: Tool;
   selectionIds: string[];
@@ -58,6 +62,8 @@ interface State {
   visibility: LayerVisibility;
   // Render furniture as outlines + labels only (no fill).
   furnitureOutline: boolean;
+  // Reveal a faint outline of furniture hidden behind other furniture.
+  showGhostOverlay: boolean;
   // Label styling (view-only): font family key (see labelFont.ts) and uppercase toggle.
   labelFont: string;
   labelUppercase: boolean;
@@ -80,6 +86,12 @@ interface Actions {
   deletePlan: (id: string) => void;
   setActivePlan: (id: string) => void;
   getActivePlan: () => FloorPlan | null;
+
+  // Folder management
+  createFolder: (name: string) => void;
+  renameFolder: (oldName: string, newName: string) => void;
+  deleteFolder: (name: string) => void;
+  movePlanToFolder: (planId: string, folder: string | null) => void;
 
   // Mutations on active plan
   updateActive: (fn: (plan: FloorPlan) => void, opts?: { skipHistory?: boolean }) => void;
@@ -117,6 +129,7 @@ interface Actions {
   toggleLabels: () => void;
   toggleVisibility: (key: keyof LayerVisibility) => void;
   toggleFurnitureOutline: () => void;
+  toggleGhostOverlay: () => void;
   setLabelFont: (key: string) => void;
   toggleLabelUppercase: () => void;
   setGridSize: (size: number) => void;
@@ -226,6 +239,7 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   plans: initialPlans,
   activePlanId: initialActiveValid,
   kits: loadKits(),
+  folders: loadFolders(),
 
   tool: "select",
   selectionIds: [],
@@ -238,6 +252,7 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   showRuler: false,
   visibility: { store: true, zones: true, furniture: true },
   furnitureOutline: false,
+  showGhostOverlay: true,
   labelFont: DEFAULT_LABEL_FONT,
   labelUppercase: true,
 
@@ -343,6 +358,60 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
   getActivePlan: () => {
     const s = get();
     return s.plans.find((p) => p.id === s.activePlanId) ?? null;
+  },
+
+  createFolder: (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    set((s) => {
+      if (s.folders.includes(trimmed)) return s;
+      const folders = [...s.folders, trimmed];
+      saveFolders(folders);
+      return { folders };
+    });
+  },
+
+  renameFolder: (oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    set((s) => {
+      const folders = s.folders.map((f) => (f === oldName ? trimmed : f));
+      // Dedupe in case the new name already exists
+      const deduped = [...new Set(folders)];
+      const plans = s.plans.map((p) =>
+        p.folder === oldName ? { ...p, folder: trimmed } : p,
+      );
+      saveFolders(deduped);
+      savePlans(plans);
+      return { folders: deduped, plans };
+    });
+  },
+
+  deleteFolder: (name) => {
+    // Removes the folder; plans in it fall back to name-prefix grouping.
+    set((s) => {
+      const folders = s.folders.filter((f) => f !== name);
+      const plans = s.plans.map((p) =>
+        p.folder === name ? { ...p, folder: undefined } : p,
+      );
+      saveFolders(folders);
+      savePlans(plans);
+      return { folders, plans };
+    });
+  },
+
+  movePlanToFolder: (planId, folder) => {
+    set((s) => {
+      const plans = s.plans.map((p) =>
+        p.id === planId ? { ...p, folder: folder ?? undefined } : p,
+      );
+      // Auto-register a brand-new folder name so it persists even if later emptied.
+      const folders =
+        folder && !s.folders.includes(folder) ? [...s.folders, folder] : s.folders;
+      savePlans(plans);
+      if (folders !== s.folders) saveFolders(folders);
+      return { plans, folders };
+    });
   },
 
   updateActive: (fn, opts) => {
@@ -707,6 +776,7 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
     set((s) => ({ visibility: { ...s.visibility, [key]: !s.visibility[key] } })),
 
   toggleFurnitureOutline: () => set((s) => ({ furnitureOutline: !s.furnitureOutline })),
+  toggleGhostOverlay: () => set((s) => ({ showGhostOverlay: !s.showGhostOverlay })),
 
   setLabelFont: (key) => set({ labelFont: key }),
   toggleLabelUppercase: () => set((s) => ({ labelUppercase: !s.labelUppercase })),

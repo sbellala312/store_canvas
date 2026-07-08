@@ -94,7 +94,7 @@ export function PlanDialog({ onClose, mode, existing }: Props) {
   };
 
   return (
-    <Modal title={mode === "new" ? "New Plan" : "Edit Plan"} onClose={onClose}>
+    <Modal title={mode === "new" ? "New Plan" : "Edit Plan"} onClose={onClose} closeOnBackdrop={false}>
       <div style={field}>
         <label style={lbl}>Plan name</label>
         <input

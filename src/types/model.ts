@@ -141,6 +141,9 @@ export interface Kit {
 export interface FloorPlan {
   id: ID;
   name: string;
+  /** Optional folder for organizing plans. When unset, the plan is grouped by
+   *  its name prefix (text before " - " or "_"). */
+  folder?: string;
   createdAt: number;
   updatedAt: number;
   floor: FloorShape;

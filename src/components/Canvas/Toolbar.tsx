@@ -51,6 +51,8 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
   const toggleVisibility = usePlanStore((s) => s.toggleVisibility);
   const furnitureOutline = usePlanStore((s) => s.furnitureOutline);
   const toggleFurnitureOutline = usePlanStore((s) => s.toggleFurnitureOutline);
+  const showGhostOverlay = usePlanStore((s) => s.showGhostOverlay);
+  const toggleGhostOverlay = usePlanStore((s) => s.toggleGhostOverlay);
   const labelFont = usePlanStore((s) => s.labelFont);
   const setLabelFont = usePlanStore((s) => s.setLabelFont);
   const labelUppercase = usePlanStore((s) => s.labelUppercase);
@@ -79,9 +81,9 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
       img.onload = () => {
         if (!plan) return;
         const existing = refImage;
-        // Preserve existing realWidthFt; recompute only if scale + drawingWidthIn are already set
-        let rw = existing?.realWidthFt ??
-          parseFloat(((plan.floor.kind === "rect" ? plan.floor.width : plan.floor.bbox.width) / 12).toFixed(3));
+        // Preserve existing realWidthFt; otherwise default to 448 ft. Recompute below
+        // only if the architectural scale + drawing width are already set.
+        let rw = existing?.realWidthFt ?? 448;
         if (existing?.scalePaperIn && existing?.drawingWidthIn) {
           const pw = parseFraction(existing.scalePaperIn);
           const rf = existing.scaleRealFt ?? 1;
@@ -241,6 +243,26 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
                     onChange={toggleFurnitureOutline}
                   />
                   Furniture outlines only
+                </label>
+                {/* Sub-option: reveal ghost outline of furniture hidden behind other furniture */}
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginLeft: 18,
+                    cursor: visibility.furniture && !furnitureOutline ? "pointer" : "default",
+                    opacity: visibility.furniture && !furnitureOutline ? 1 : 0.45,
+                  }}
+                  title="Show a faint outline of furniture hidden behind other furniture"
+                >
+                  <input
+                    type="checkbox"
+                    checked={showGhostOverlay}
+                    disabled={!visibility.furniture || furnitureOutline}
+                    onChange={toggleGhostOverlay}
+                  />
+                  Show hidden furniture
                 </label>
 
                 <div style={{ borderTop: "1px solid #e8edf2", margin: "2px 0" }} />

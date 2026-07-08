@@ -106,7 +106,8 @@ function CalloutLabel({
 
 // The ghost overlay is O(n²) in placed items; skip it on very dense plans so edits
 // don't hitch. Items still render normally — only the faint occlusion hint is dropped.
-const GHOST_LIMIT = 60;
+// This is a hard performance ceiling; the feature is also user-toggleable (showGhostOverlay).
+const GHOST_LIMIT = 250;
 
 function tier(catalogId: string): number {
   const c = getCatalogItem(catalogId);
@@ -120,6 +121,7 @@ function tier(catalogId: string): number {
 export const ItemsLayer = memo(function ItemsLayer({ plan, pixelsPerInch, selectionIds, onSelect }: Props) {
   const updatePlacedItem = usePlanStore((s) => s.updatePlacedItem);
   const outlineOnly = usePlanStore((s) => s.furnitureOutline);
+  const showGhostOverlay = usePlanStore((s) => s.showGhostOverlay);
   const labelFont = usePlanStore((s) => s.labelFont);
   const labelUppercase = usePlanStore((s) => s.labelUppercase);
   const labelFamily = fontCss(labelFont);
@@ -151,7 +153,7 @@ export const ItemsLayer = memo(function ItemsLayer({ plan, pixelsPerInch, select
 
       {/* Ghost overlay: faintly reveal the hidden portion of back items under front items */}
       <Group listening={false}>
-        {!outlineOnly && sorted.length <= GHOST_LIMIT && sorted.flatMap((frontItem, fi) => {
+        {showGhostOverlay && !outlineOnly && sorted.length <= GHOST_LIMIT && sorted.flatMap((frontItem, fi) => {
           const frontCat = getCatalogItem(frontItem.catalogId);
           if (!frontCat) return [];
           const fx = frontItem.x * pixelsPerInch;

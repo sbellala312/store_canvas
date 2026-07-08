@@ -3,6 +3,7 @@ import type { FloorPlan, Kit } from "../types/model";
 const PLANS_KEY = "storeCanvas.plans";
 const ACTIVE_KEY = "storeCanvas.activePlanId";
 const KITS_KEY = "storeCanvas.kits";
+const FOLDERS_KEY = "storeCanvas.folders";
 
 export function loadPlans(): FloorPlan[] {
   try {
@@ -65,6 +66,25 @@ export function loadKits(): Kit[] {
 
 export function saveKits(kits: Kit[]): void {
   localStorage.setItem(KITS_KEY, JSON.stringify(kits));
+}
+
+export function loadFolders(): string[] {
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((f) => typeof f === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveFolders(folders: string[]): void {
+  try {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
 const SCALE_KEY = "storeCanvas.scaleRatio";

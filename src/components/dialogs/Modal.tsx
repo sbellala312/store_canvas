@@ -5,12 +5,15 @@ interface Props {
   onClose: () => void;
   children: ReactNode;
   width?: number;
+  /** When false, clicking the backdrop outside the dialog will NOT close it.
+   *  The user must use Cancel / a primary action / the × button. Defaults to true. */
+  closeOnBackdrop?: boolean;
 }
 
-export function Modal({ title, onClose, children, width = 440 }: Props) {
+export function Modal({ title, onClose, children, width = 440, closeOnBackdrop = true }: Props) {
   return (
     <div
-      onClick={onClose}
+      onClick={closeOnBackdrop ? onClose : undefined}
       style={{
         position: "fixed",
         inset: 0,
