@@ -4,6 +4,11 @@ import { useRefImageStore } from "../../state/refImageStore";
 import type { Tool } from "../../types/model";
 import { downloadJSON, downloadCSV } from "../../utils/exportData";
 import { FONT_OPTIONS } from "../../utils/labelFont";
+import { analyzeCad, type CadReviewRow, type CadScope } from "../../services/cadAutoPlace";
+import type { CadUsage } from "../../services/cadVision";
+import { CadImportDialog } from "../dialogs/CadImportDialog";
+import { CadLoadingOverlay } from "./CadLoadingOverlay";
+import { Modal } from "../dialogs/Modal";
 
 interface Props {
   onNewPlan: () => void;
@@ -29,6 +34,13 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
   const [exportDataOpen, setExportDataOpen] = useState(false);
   const [refOpen, setRefOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [cadLoading, setCadLoading] = useState(false);
+  const [cadRows, setCadRows] = useState<CadReviewRow[] | null>(null);
+  const [cadImage, setCadImage] = useState<string | undefined>(undefined);
+  const [cadUsage, setCadUsage] = useState<CadUsage | null>(null);
+  const [cadScopeLabel, setCadScopeLabel] = useState("Entire Store");
+  const [cadMenuOpen, setCadMenuOpen] = useState(false);
+  const [cadError, setCadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -105,6 +117,24 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  };
+
+  const handleAutoPlace = async (scope: CadScope) => {
+    if (!plan || !refImage?.dataUrl || !refImage?.imageWidth || !refImage?.imageHeight) return;
+    setCadMenuOpen(false);
+    const label = scope === "store" ? "Entire Store" : scope.name;
+    setCadScopeLabel(label);
+    setCadLoading(true);
+    try {
+      const result = await analyzeCad(refImage, plan, scope);
+      setCadRows(result.rows);
+      setCadImage(result.analyzedImage);
+      setCadUsage(result.usage);
+    } catch (err) {
+      setCadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCadLoading(false);
+    }
   };
 
   const btn = (active: boolean): React.CSSProperties => ({
@@ -531,9 +561,119 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
           </>
         )}
       </div>
+      {/* Auto-place from CAD — dropdown for scope selection */}
+      <div style={{ position: "relative" }}>
+        <button
+          style={{
+            ...btn(cadMenuOpen),
+            background: cadLoading ? "#e8f0fe" : cadMenuOpen ? "#1f6feb" : "white",
+            color: cadMenuOpen ? "white" : "#2d3742",
+            opacity: (!plan || !refImage?.dataUrl || !refImage?.imageWidth) ? 0.45 : 1,
+          }}
+          disabled={!plan || !refImage?.dataUrl || !refImage?.imageWidth || cadLoading}
+          onClick={() => setCadMenuOpen((o) => !o)}
+          title={
+            !refImage?.dataUrl
+              ? "Load a reference image first (🖼 Ref button)"
+              : !refImage?.imageWidth
+              ? "Reference image is not fully loaded yet"
+              : "Choose a scope and auto-place furniture from the CAD reference image"
+          }
+        >
+          🤖 Auto-place ▾
+        </button>
+
+        {cadMenuOpen && plan && (
+          <>
+            <div
+              style={{ position: "fixed", inset: 0, zIndex: 99 }}
+              onClick={() => setCadMenuOpen(false)}
+            />
+            <div style={{
+              position: "absolute", top: "100%", right: 0, marginTop: 2,
+              background: "white", border: "1px solid #c0cad4", borderRadius: 6,
+              boxShadow: "0 4px 14px rgba(0,0,0,0.15)", zIndex: 100,
+              minWidth: 200, padding: 4, fontSize: 13,
+            }}>
+              {/* Entire Store */}
+              <button
+                style={menuItem}
+                onClick={() => handleAutoPlace("store")}
+              >
+                <span style={{ fontSize: 15 }}>🏪</span> Entire Store
+              </button>
+
+              {/* Zone divider + list */}
+              {plan.zones.length > 0 && (
+                <>
+                  <div style={{
+                    fontSize: 10, fontWeight: 600, color: "#8a96a3",
+                    padding: "6px 10px 2px", textTransform: "uppercase", letterSpacing: "0.05em",
+                  }}>
+                    Zones
+                  </div>
+                  {plan.zones.map((zone) => (
+                    <button
+                      key={zone.id}
+                      style={menuItem}
+                      onClick={() => handleAutoPlace(zone)}
+                    >
+                      <span style={{
+                        display: "inline-block", width: 10, height: 10,
+                        borderRadius: 2, background: zone.color, marginRight: 6,
+                        flexShrink: 0,
+                      }} />
+                      {zone.name}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {cadLoading && <CadLoadingOverlay />}
+      {cadRows !== null && (
+        <CadImportDialog
+          rows={cadRows}
+          scopeLabel={cadScopeLabel}
+          analyzedImage={cadImage}
+          usage={cadUsage}
+          onClose={() => { setCadRows(null); setCadImage(undefined); setCadUsage(null); }}
+        />
+      )}
+      {cadError !== null && (
+        <Modal title="Auto-place failed" onClose={() => setCadError(null)} width={420}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 24, flexShrink: 0 }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: 13, color: "#2d3742", lineHeight: 1.6, marginBottom: 16 }}>
+                {cadError}
+              </div>
+              <button
+                onClick={() => setCadError(null)}
+                style={{
+                  padding: "7px 20px", borderRadius: 5, border: "none",
+                  background: "#2563eb", color: "white", fontSize: 13,
+                  fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
+
+const menuItem: React.CSSProperties = {
+  display: "flex", alignItems: "center", width: "100%", textAlign: "left",
+  padding: "7px 10px", background: "none", border: "none", cursor: "pointer",
+  fontSize: 13, color: "#2d3742", borderRadius: 4,
+};
 
 // ── Architectural scale sub-panel ────────────────────────────────────────────
 
