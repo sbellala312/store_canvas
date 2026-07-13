@@ -366,7 +366,26 @@ export function CanvasStage({ width, height }: Props) {
   };
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    const clickedOnEmpty = e.target === e.target.getStage() || e.target.attrs?.name === "floor-bg";
+    // Zones are organizational overlays — a click on a zone's fill should still
+    // allow marquee-drag selection. If the user doesn't drag, the zone's own
+    // onClick fires normally (handled at mouse-up: no movement → no hit-test).
+    const targetName: string = e.target.attrs?.name ?? "";
+    // Zones are rendered as <Group name="zone-XXX"><Rect/></Group>, and Konva's
+    // e.target is the child shape — so we walk up to find any ancestor with a
+    // "zone-" name. Only pass through when NOT in an active edit mode (move/
+    // resize), where the user's drag is meant to move/resize the zone.
+    let ancestor: any = e.target;
+    let onZoneFill = false;
+    while (ancestor && ancestor !== e.target.getStage()) {
+      const n: string = ancestor.attrs?.name ?? "";
+      if (n.startsWith("zone-")) { onZoneFill = true; break; }
+      ancestor = ancestor.getParent?.();
+    }
+    onZoneFill = onZoneFill && zoneEditMode === "view";
+    const clickedOnEmpty =
+      e.target === e.target.getStage() ||
+      targetName === "floor-bg" ||
+      onZoneFill;
     const wp = getWorldPoint();
     if (!wp) return;
 
@@ -380,7 +399,11 @@ export function CanvasStage({ width, height }: Props) {
 
     if (tool === "select") {
       if (clickedOnEmpty) {
-        if (!e.evt.shiftKey) clearSelection();
+        // For a bare zone click we DON'T clear the selection yet — the zone's
+        // own onClick may fire (if the user doesn't drag) and should behave
+        // normally. If the user does drag, the mouse-up hit-test replaces the
+        // selection anyway, so nothing is lost.
+        if (!onZoneFill && !e.evt.shiftKey) clearSelection();
         setMarquee({ start: wp, end: wp });
       }
       return;
@@ -905,7 +928,7 @@ export function CanvasStage({ width, height }: Props) {
             );
           })()}
           {/* Marquee */}
-          {marquee && (
+          {marquee && (Math.abs(marquee.end.x - marquee.start.x) > 2 || Math.abs(marquee.end.y - marquee.start.y) > 2) && (
             <Rect
               x={Math.min(marquee.start.x, marquee.end.x) * pixelsPerInch}
               y={Math.min(marquee.start.y, marquee.end.y) * pixelsPerInch}
