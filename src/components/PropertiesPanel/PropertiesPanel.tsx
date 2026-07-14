@@ -647,6 +647,16 @@ function PlacedItemPanel({ placed, cat }: { placed: PlacedItem; cat: CatalogItem
   const bringForward = usePlanStore((s) => s.bringForward);
   const sendBackward = usePlanStore((s) => s.sendBackward);
   const sendToBack = usePlanStore((s) => s.sendToBack);
+  const pixelsPerInch = usePlanStore((s) => s.pixelsPerInch);
+
+  // Callout labels — the ones the "Label opacity" slider controls — only render
+  // for thin items (mirrors, wall art). Mirrors the exact rule in ItemsLayer:
+  // maxDim >= 20 && minDim < 28 (in pixels at the plan's base scale, not zoomed).
+  const wPx = cat.width * pixelsPerInch;
+  const hPx = cat.depth * pixelsPerInch;
+  const minPx = Math.min(wPx, hPx);
+  const maxPx = Math.max(wPx, hPx);
+  const hasCalloutLabel = maxPx >= 20 && minPx < 28;
 
   const images = cat.allImages ?? (cat.imageUrl ? [cat.imageUrl] : []);
   const safeIdx = Math.min(imgIdx, Math.max(0, images.length - 1));
@@ -821,22 +831,25 @@ function PlacedItemPanel({ placed, cat }: { placed: PlacedItem; cat: CatalogItem
             );
           })}
         </div>
-        {/* Callout label opacity (affects the annotation box for thin items like mirrors) */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
-          <span style={{ fontSize: 11, color: "#6b7785", flexShrink: 0 }}>Label opacity</span>
-          {([0.3, 0.55, 0.85, 1] as const).map((o) => {
-            const active = Math.round((placed.labelCalloutOpacity ?? 0.85) * 100) === Math.round(o * 100);
-            return (
-              <button
-                key={o}
-                onClick={() => updatePlacedItem(id, { labelCalloutOpacity: o === 0.85 ? undefined : o })}
-                style={{ ...btnStyle, padding: "2px 6px", fontSize: 10, width: "auto", background: active ? "#1f6feb" : undefined, color: active ? "white" : undefined }}
-              >
-                {Math.round(o * 100)}%
-              </button>
-            );
-          })}
-        </div>
+        {/* Callout label opacity — only shown for thin items (mirrors, wall art)
+            whose labels render as draggable callout boxes rather than in-shape text. */}
+        {hasCalloutLabel && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+            <span style={{ fontSize: 11, color: "#6b7785", flexShrink: 0 }}>Label opacity</span>
+            {([0.3, 0.55, 0.85, 1] as const).map((o) => {
+              const active = Math.round((placed.labelCalloutOpacity ?? 0.85) * 100) === Math.round(o * 100);
+              return (
+                <button
+                  key={o}
+                  onClick={() => updatePlacedItem(id, { labelCalloutOpacity: o === 0.85 ? undefined : o })}
+                  style={{ ...btnStyle, padding: "2px 6px", fontSize: 10, width: "auto", background: active ? "#1f6feb" : undefined, color: active ? "white" : undefined }}
+                >
+                  {Math.round(o * 100)}%
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <hr style={hr} />
