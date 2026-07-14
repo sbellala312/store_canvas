@@ -42,6 +42,12 @@ interface MeasureState {
   b: { x: number; y: number } | null;
 }
 
+interface MeasureSnap {
+  x: number;
+  y: number;
+  kind: "corner" | "edge";
+}
+
 export function CanvasStage({ width, height }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,6 +84,8 @@ export function CanvasStage({ width, height }: Props) {
   const updateDoor = usePlanStore((s) => s.updateDoor);
   const addWindow = usePlanStore((s) => s.addWindow);
   const updateWindow = usePlanStore((s) => s.updateWindow);
+  const addMeasurement = usePlanStore((s) => s.addMeasurement);
+  const deleteMeasurement = usePlanStore((s) => s.deleteMeasurement);
   const stampKit = usePlanStore((s) => s.stampKit);
   const setTool = usePlanStore((s) => s.setTool);
   const showRuler = usePlanStore((s) => s.showRuler);
@@ -90,6 +98,7 @@ export function CanvasStage({ width, height }: Props) {
   const [draftRect, setDraftRect] = useState<DraftRectState | null>(null);
   const [draftLine, setDraftLine] = useState<DraftLineState | null>(null);
   const [measure, setMeasure] = useState<MeasureState | null>(null);
+  const [measureSnap, setMeasureSnap] = useState<MeasureSnap | null>(null);
   const [marquee, setMarquee] = useState<DraftRectState | null>(null);
   const [draftPolygon, setDraftPolygon] = useState<Point[] | null>(null);
   const [isPanningState, setIsPanningState] = useState(false);
@@ -240,6 +249,7 @@ export function CanvasStage({ width, height }: Props) {
     setDraftLine(null);
     setDraftRect(null);
     setMeasure(null);
+    setMeasureSnap(null);
     setWallEndpointSnap(null);
     setWallProjectionSnap(null);
   }, [tool]);
@@ -259,6 +269,92 @@ export function CanvasStage({ width, height }: Props) {
       x: start.x + dist * Math.cos(snappedAngle),
       y: start.y + dist * Math.sin(snappedAngle),
     };
+  }
+
+  // Returns the 4 rotated world-space corners of a placed item, in order:
+  // top-left, top-right, bottom-right, bottom-left (before rotation).
+  function getItemCorners(
+    item: { x: number; y: number; rotation: number },
+    w: number,
+    d: number,
+  ): { x: number; y: number }[] {
+    const cx = item.x + w / 2;
+    const cy = item.y + d / 2;
+    const rad = (item.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const local = [
+      { dx: -w / 2, dy: -d / 2 },
+      { dx: w / 2, dy: -d / 2 },
+      { dx: w / 2, dy: d / 2 },
+      { dx: -w / 2, dy: d / 2 },
+    ];
+    return local.map(({ dx, dy }) => ({
+      x: cx + dx * cos - dy * sin,
+      y: cy + dx * sin + dy * cos,
+    }));
+  }
+
+  // Project point p onto the line segment (a, b), clamped to the segment.
+  function projectOnSegment(
+    p: { x: number; y: number },
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ): { x: number; y: number } {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return { x: a.x, y: a.y };
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+    return { x: a.x + t * dx, y: a.y + t * dy };
+  }
+
+  // Find nearest furniture corner (preferred) or edge point within thresholdInches.
+  // Corners get priority: any corner within threshold beats any edge.
+  function findFurnitureSnap(
+    wp: { x: number; y: number },
+    thresholdInches: number,
+  ): MeasureSnap | null {
+    if (!plan) return null;
+    let bestCorner: MeasureSnap | null = null;
+    let bestCornerDist = thresholdInches;
+    let bestEdge: MeasureSnap | null = null;
+    let bestEdgeDist = thresholdInches;
+    for (const it of plan.placedItems) {
+      const cat = getCatalogItem(it.catalogId);
+      if (!cat) continue;
+      // Circles (accessories like lamps): snap to the center point only.
+      if (cat.shape === "circle") {
+        const cx = it.x + cat.width / 2;
+        const cy = it.y + cat.depth / 2;
+        const d = distance(wp, { x: cx, y: cy });
+        if (d < bestCornerDist) {
+          bestCornerDist = d;
+          bestCorner = { x: cx, y: cy, kind: "corner" };
+        }
+        continue;
+      }
+      const corners = getItemCorners(it, cat.width, cat.depth);
+      for (const c of corners) {
+        const d = distance(wp, c);
+        if (d < bestCornerDist) {
+          bestCornerDist = d;
+          bestCorner = { x: c.x, y: c.y, kind: "corner" };
+        }
+      }
+      // Only bother computing edges if we haven't already locked a nearby corner.
+      for (let i = 0; i < 4; i++) {
+        const a = corners[i];
+        const b = corners[(i + 1) % 4];
+        const proj = projectOnSegment(wp, a, b);
+        const d = distance(wp, proj);
+        if (d < bestEdgeDist) {
+          bestEdgeDist = d;
+          bestEdge = { x: proj.x, y: proj.y, kind: "edge" };
+        }
+      }
+    }
+    return bestCorner ?? bestEdge;
   }
 
   // Returns the nearest wall endpoint within snapThresholdInches, or null.
@@ -494,10 +590,23 @@ export function CanvasStage({ width, height }: Props) {
       return;
     }
     if (tool === "measure") {
-      if (!measure || measure.b) {
-        setMeasure({ a: wp, b: null });
+      // Snap to furniture corner/edge if within threshold; else use raw cursor.
+      const snapThreshold = 14 / (pixelsPerInch * zoom);
+      const snap = altDown.current ? null : findFurnitureSnap(wp, snapThreshold);
+      const point = snap ? { x: snap.x, y: snap.y } : wp;
+      if (!measure) {
+        setMeasure({ a: point, b: null });
       } else {
-        setMeasure({ a: measure.a, b: wp });
+        // Second endpoint: apply shift constraint (0°/45°/90°) unless snapping wins.
+        const end = shiftDown.current && !snap
+          ? constrainToAngle(measure.a, point)
+          : point;
+        // Ignore zero-length measurements (double-click on the same spot).
+        if (distance(measure.a, end) > 0.5) {
+          addMeasurement({ ax: measure.a.x, ay: measure.a.y, bx: end.x, by: end.y });
+        }
+        // Reset so the next click starts a new measurement chain.
+        setMeasure(null);
       }
       return;
     }
@@ -559,8 +668,14 @@ export function CanvasStage({ width, height }: Props) {
     if (marquee) {
       setMarquee({ start: marquee.start, end: wp });
     }
-    if (measure && !measure.b) {
-      // live cursor, no commit
+    if (tool === "measure") {
+      // Update live snap indicator whenever the measure tool is active (before
+      // first click too, so the user sees the snap target before starting).
+      const snapThreshold = 14 / (pixelsPerInch * zoom);
+      const snap = altDown.current ? null : findFurnitureSnap(wp, snapThreshold);
+      setMeasureSnap(snap);
+    } else if (measureSnap) {
+      setMeasureSnap(null);
     }
   };
 
@@ -1076,6 +1191,82 @@ export function CanvasStage({ width, height }: Props) {
               />
             </Group>
           )}
+          {/* Pinned measurements — persisted with the plan. Each is
+              interactive: clicking the × next to the label removes it.
+              Hidden when plan.showMeasurements === false. */}
+          {(plan.showMeasurements ?? true) && (plan.measurements ?? []).map((m) => {
+            const a = { x: m.ax, y: m.ay };
+            const b = { x: m.bx, y: m.by };
+            const d = distance(a, b);
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            // × delete button sits ~28px right of the label anchor.
+            const labelX = mid.x * pixelsPerInch + 6;
+            const labelY = mid.y * pixelsPerInch - 18;
+            return (
+              <Group key={m.id}>
+                <Line
+                  points={[
+                    a.x * pixelsPerInch,
+                    a.y * pixelsPerInch,
+                    b.x * pixelsPerInch,
+                    b.y * pixelsPerInch,
+                  ]}
+                  stroke="#d97706"
+                  strokeWidth={1.5}
+                  dash={[6, 4]}
+                  opacity={0.85}
+                  listening={false}
+                />
+                <Circle x={a.x * pixelsPerInch} y={a.y * pixelsPerInch} radius={3} fill="#d97706" listening={false} />
+                <Circle x={b.x * pixelsPerInch} y={b.y * pixelsPerInch} radius={3} fill="#d97706" listening={false} />
+                <Text
+                  x={labelX}
+                  y={labelY}
+                  text={`${feetInches(d, { compact: true })} · ${parseFloat(d.toFixed(2))}"`}
+                  fontSize={12}
+                  fill="#d97706"
+                  fontStyle="bold"
+                  listening={false}
+                />
+                {/* Delete × — a small red circle with an × on top. Konva
+                    doesn't have hit-testing on text alone, so we back it
+                    with a fill circle. */}
+                <Circle
+                  x={labelX - 10}
+                  y={labelY + 6}
+                  radius={7}
+                  fill="white"
+                  stroke="#d97706"
+                  strokeWidth={1}
+                  onClick={(e) => {
+                    e.cancelBubble = true;
+                    deleteMeasurement(m.id);
+                  }}
+                  onTap={(e) => {
+                    e.cancelBubble = true;
+                    deleteMeasurement(m.id);
+                  }}
+                  onMouseEnter={(e) => {
+                    const stage = e.target.getStage();
+                    if (stage) stage.container().style.cursor = "pointer";
+                  }}
+                  onMouseLeave={(e) => {
+                    const stage = e.target.getStage();
+                    if (stage) stage.container().style.cursor = "";
+                  }}
+                />
+                <Text
+                  x={labelX - 14}
+                  y={labelY + 1}
+                  text="×"
+                  fontSize={13}
+                  fill="#d97706"
+                  fontStyle="bold"
+                  listening={false}
+                />
+              </Group>
+            );
+          })}
           {/* Measure */}
           {measure && (
             <Group listening={false}>
@@ -1086,7 +1277,14 @@ export function CanvasStage({ width, height }: Props) {
                 fill="#d97706"
               />
               {(() => {
-                const end = measure.b ?? hoverWorld ?? measure.a;
+                // Live end: use snap point if present, else raw hover; then
+                // apply shift constraint (unless a real snap point wins).
+                const rawEnd = measureSnap
+                  ? { x: measureSnap.x, y: measureSnap.y }
+                  : hoverWorld ?? measure.a;
+                const end = shiftDown.current && !measureSnap
+                  ? constrainToAngle(measure.a, rawEnd)
+                  : rawEnd;
                 const d = distance(measure.a, end);
                 return (
                   <>
@@ -1119,6 +1317,33 @@ export function CanvasStage({ width, height }: Props) {
                   </>
                 );
               })()}
+            </Group>
+          )}
+          {/* Measure snap indicator: green square for corner, green circle for
+              edge. Shown whenever the measure tool is active and hovering near
+              furniture — including before the first click. */}
+          {tool === "measure" && measureSnap && (
+            <Group listening={false}>
+              {measureSnap.kind === "corner" ? (
+                <Rect
+                  x={measureSnap.x * pixelsPerInch - 5}
+                  y={measureSnap.y * pixelsPerInch - 5}
+                  width={10}
+                  height={10}
+                  stroke="#16a34a"
+                  strokeWidth={2}
+                  fill="rgba(22,163,74,0.15)"
+                />
+              ) : (
+                <Circle
+                  x={measureSnap.x * pixelsPerInch}
+                  y={measureSnap.y * pixelsPerInch}
+                  radius={6}
+                  stroke="#16a34a"
+                  strokeWidth={2}
+                  fill="rgba(22,163,74,0.15)"
+                />
+              )}
             </Group>
           )}
         </Layer>
@@ -1279,7 +1504,7 @@ export function CanvasStage({ width, height }: Props) {
           {tool === "wall" && "Click two points to draw a wall · Hold Shift for straight walls (0°/45°/90°) · Hold Alt to bypass snap"}
           {tool === "door" && "Click on a wall to place a door (36\" default width)"}
           {tool === "window" && "Click on a wall to place a window (36\" default width)"}
-          {tool === "measure" && "Click two points to measure distance"}
+          {tool === "measure" && "Click two points to measure · auto-pins to canvas · click × to remove · Shift = straight · Alt = disable snap"}
           {tool === "delete" && "Click items to delete"}
           {tool !== "zonePolygon" && tool !== "pan" && " — Esc to cancel"}
         </div>

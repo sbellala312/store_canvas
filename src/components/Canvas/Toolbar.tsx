@@ -57,6 +57,8 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
   const toggleGrid = usePlanStore((s) => s.toggleGrid);
   const toggleSnap = usePlanStore((s) => s.toggleSnap);
   const toggleLabels = usePlanStore((s) => s.toggleLabels);
+  const toggleShowMeasurements = usePlanStore((s) => s.toggleShowMeasurements);
+  const clearMeasurements = usePlanStore((s) => s.clearMeasurements);
   const showRuler = usePlanStore((s) => s.showRuler);
   const toggleRuler = usePlanStore((s) => s.toggleRuler);
   const visibility = usePlanStore((s) => s.visibility);
@@ -312,6 +314,44 @@ export function Toolbar({ onNewPlan, onEditPlan, onOpenPlans, onExport, onSaveKi
                 >
                   <input type="checkbox" checked={showRuler} onChange={toggleRuler} /> Ruler
                 </label>
+                <label
+                  style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+                  title="Show pinned measurements on the canvas"
+                >
+                  <input
+                    type="checkbox"
+                    checked={plan.showMeasurements ?? true}
+                    onChange={toggleShowMeasurements}
+                  />
+                  Measurements
+                  {(plan.measurements?.length ?? 0) > 0 && (
+                    <span style={{ color: "#6b7785", fontSize: 11 }}>
+                      ({plan.measurements!.length})
+                    </span>
+                  )}
+                </label>
+                {(plan.measurements?.length ?? 0) > 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Clear all ${plan.measurements!.length} pinned measurement(s)?`)) {
+                        clearMeasurements();
+                      }
+                    }}
+                    style={{
+                      alignSelf: "flex-start",
+                      marginLeft: 22,
+                      padding: "2px 8px",
+                      fontSize: 11,
+                      background: "white",
+                      color: "#e74c3c",
+                      border: "1px solid #f0c8c2",
+                      borderRadius: 3,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Clear all
+                  </button>
+                )}
 
                 <div style={{ borderTop: "1px solid #e8edf2", margin: "2px 0" }} />
                 <div style={{ fontWeight: 600, fontSize: 13 }}>Labels</div>

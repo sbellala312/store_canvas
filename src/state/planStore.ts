@@ -124,6 +124,11 @@ interface Actions {
   updateWindow: (id: string, patch: Partial<Omit<Window, "id">>) => void;
   deleteWindow: (id: string) => void;
 
+  addMeasurement: (m: { ax: number; ay: number; bx: number; by: number }) => string;
+  deleteMeasurement: (id: string) => void;
+  clearMeasurements: () => void;
+  toggleShowMeasurements: () => void;
+
   toggleGrid: () => void;
   toggleSnap: () => void;
   toggleLabels: () => void;
@@ -658,6 +663,31 @@ export const usePlanStore = create<State & Actions>((set, get) => ({
       p.windows = p.windows.filter((w) => w.id !== id);
     });
     get().clearSelection();
+  },
+
+  addMeasurement: (m) => {
+    const id = uuid();
+    get().updateActive((p) => {
+      if (!p.measurements) p.measurements = [];
+      p.measurements.push({ id, ...m });
+    }, { skipHistory: true });
+    return id;
+  },
+  deleteMeasurement: (id) => {
+    get().updateActive((p) => {
+      if (!p.measurements) return;
+      p.measurements = p.measurements.filter((m) => m.id !== id);
+    }, { skipHistory: true });
+  },
+  clearMeasurements: () => {
+    get().updateActive((p) => {
+      p.measurements = [];
+    }, { skipHistory: true });
+  },
+  toggleShowMeasurements: () => {
+    get().updateActive((p) => {
+      p.showMeasurements = !(p.showMeasurements ?? true);
+    }, { skipHistory: true });
   },
 
   toggleGrid: () => {

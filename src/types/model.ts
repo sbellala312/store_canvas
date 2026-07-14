@@ -138,6 +138,15 @@ export interface Kit {
   bbox: { width: Inches; height: Inches };
 }
 
+/** A pinned distance measurement between two world-space points (inches). */
+export interface Measurement {
+  id: ID;
+  ax: Inches;
+  ay: Inches;
+  bx: Inches;
+  by: Inches;
+}
+
 export interface FloorPlan {
   id: ID;
   name: string;
@@ -157,6 +166,10 @@ export interface FloorPlan {
   doors: Door[];
   windows: Window[];
   placedItems: PlacedItem[];
+  /** Pinned distance measurements. Optional so older plans don't break. */
+  measurements?: Measurement[];
+  /** Whether pinned measurements are visible on the canvas. Optional, defaults to true. */
+  showMeasurements?: boolean;
 }
 
 export type Tool =
